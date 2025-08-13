@@ -1,16 +1,47 @@
+// src/components/Hero.jsx
+import useSiteSettings from "../hooks/useSiteSettings";
+import { Link } from "react-router-dom";
+
 export default function Hero({ onBook }) {
+    const s = useSiteSettings();
+
     return (
-        <section className="mx-auto max-w-6xl px-4 py-20 text-center">
-            <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight text-gray-900">
-                Nail Art • Luxe Care • <span className="text-[#ff9e0a]">Clean Aesthetic</span>
-            </h1>
-            <p className="mt-5 text-lg text-neutral-700 max-w-2xl mx-auto">
-                Premium nail services with a gentle touch. Modern designs, healthy nails, spotless hygiene.
-            </p>
-            <div className="mt-8 flex items-center justify-center gap-3">
-                <a href="#services" className="btn btn-primary">Explore Services</a>
-                <button className="btn btn-ghost" onClick={onBook}>Book Now</button>
+        <section id="hero" className="bg-transparent">
+            <div className="mx-auto max-w-6xl px-4 py-10 md:py-16">
+                <div className="grid md:grid-cols-2 gap-8 lg:gap-12 items-center">
+                    {/* Text */}
+                    <div className="order-2 md:order-1">
+                        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tight">
+                            {s?.heroHeadline || "Blessed N Polished"}
+                        </h1>
+                        <p className="mt-4 text-lg text-neutral-700">
+                            {s?.heroSub || "How we do"}
+                        </p>
+
+                        <div className="mt-6 flex flex-wrap gap-3">
+                            {onBook
+                                ? <button className="btn btn-primary" onClick={onBook}>Book Now</button>
+                                : <Link to="/book" className="btn btn-primary">Book Now</Link>}
+                            <Link to="/services" className="btn btn-ghost">Our Services</Link>
+                        </div>
+                    </div>
+
+                    {/* Image */}
+                    <div className="order-1 md:order-2">
+                        <div className="rounded-3xl overflow-hidden shadow-xl ring-1 ring-black/5">
+                            {s?.heroImage ? (
+                                <img
+                                    src={s.heroImage}
+                                    alt=""
+                                    className="w-full h-[380px] md:h-[460px] object-cover"
+                                />
+                            ) : (
+                                <div className="w-full h-[380px] md:h-[460px] bg-neutral-200" />
+                            )}
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
-    )
+    );
 }

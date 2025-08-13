@@ -3,6 +3,11 @@
 @tailwind utilities;
 
 /* App-wide primitives */
+
+html {
+  scroll-behavior: smooth;
+}
+
 :root { color-scheme: light; }
 
 @layer base {
