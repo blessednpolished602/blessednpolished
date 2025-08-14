@@ -15,31 +15,45 @@ export default function Hero({ onBook }) {
                             {s?.heroHeadline || "Blessed N Polished"}
                         </h1>
                         <p className="mt-4 text-lg text-neutral-700">
-                            {s?.heroSub || "How we do"}
+                            {s?.heroSub || "May your nails always get compliments"}
                         </p>
 
                         <div className="mt-6 flex flex-wrap gap-3">
-                            {onBook
-                                ? <button className="btn btn-primary" onClick={onBook}>Book Now</button>
-                                : <Link to="/book" className="btn btn-primary">Book Now</Link>}
+                            {onBook ? (
+                                <button className="btn btn-primary" onClick={onBook}>Book Now</button>
+                            ) : (
+                                <Link to="/book" className="btn btn-primary">Book Now</Link>
+                            )}
                             <Link to="/services" className="btn btn-ghost">Our Services</Link>
                         </div>
                     </div>
 
                     {/* Image */}
                     <div className="order-1 md:order-2">
-                        <div className="rounded-3xl overflow-hidden shadow-xl ring-1 ring-black/5">
+                        <div
+                            className="
+      relative mx-auto
+      w-full max-w-[clamp(260px,80vw,420px)]  /* cap size on phones */
+      md:max-w-none                           /* free to expand on desktop */
+      rounded-3xl overflow-hidden shadow-xl ring-1 ring-black/5
+      aspect-[4/5] sm:aspect-[3/4] md:aspect-[4/3]
+    "
+                        >
                             {s?.heroImage ? (
                                 <img
                                     src={s.heroImage}
                                     alt=""
-                                    className="w-full h-[380px] md:h-[460px] object-cover"
+                                    className="absolute inset-0 h-full w-full object-cover object-center"
+                                    width={1200}
+                                    height={1600}
+                                    loading="eager"
                                 />
                             ) : (
-                                <div className="w-full h-[380px] md:h-[460px] bg-neutral-200" />
+                                <div className="absolute inset-0 bg-neutral-200" />
                             )}
                         </div>
                     </div>
+
                 </div>
             </div>
         </section>

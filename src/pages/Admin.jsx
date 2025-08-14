@@ -19,6 +19,7 @@ import {
     deleteDoc,
     doc,
     setDoc,
+    updateDoc,
 } from "firebase/firestore";
 
 import {
@@ -80,6 +81,7 @@ export default function Admin() {
             </header>
 
             <HeroEditor />
+            <SignatureLooksEditor />
             <GalleryUploader />
             <GalleryManager />
         </div>
@@ -347,6 +349,8 @@ function GalleryUploader() {
 
 function GalleryManager() {
     const [images, setImages] = useState([]);
+    const [editing, setEditing] = useState(null);
+    const [savingCatId, setSavingCatId] = useState(null);
 
     useEffect(() => {
         const q = query(collection(db, "images"), orderBy("createdAt", "desc"));
@@ -368,37 +372,345 @@ function GalleryManager() {
         }
     }
 
+    async function updateCategory(img, category) {
+        try {
+            setSavingCatId(img.id);
+            await updateDoc(doc(db, "images", img.id), {
+                category,
+                updatedAt: serverTimestamp(),
+            });
+        } finally {
+            setSavingCatId(null);
+        }
+    }
+
     return (
         <section>
             <h2 className="font-semibold mb-3">Manage Gallery</h2>
+
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {images.map((img) => (
                     <div
                         key={img.id}
                         className="bg-white border rounded-2xl overflow-hidden shadow-soft"
                     >
-                        {/* keeps uniform tiles; no cropping */}
+                        {/* uniform tiles; no cropping */}
                         <div className="aspect-[4/3] bg-neutral-100">
                             <img
                                 src={img.url}
-                                alt=""
+                                alt={img.alt || ""}
                                 loading="lazy"
                                 className="w-full h-full object-contain p-1"
                             />
                         </div>
 
-                        <div className="flex items-center justify-between p-3 text-sm">
-                            <span className="text-neutral-600">
-                                {img.category || "general"}
-                            </span>
-                            <button className="btn btn-ghost" onClick={() => remove(img)}>
-                                Delete
-                            </button>
+                        <div className="flex items-center justify-between p-3 text-sm gap-2">
+                            <div className="flex items-center gap-2">
+                                <label className="text-neutral-600">Category:</label>
+                                <select
+                                    className="border rounded-md px-2 py-1"
+                                    value={img.category || "general"}
+                                    onChange={(e) => updateCategory(img, e.target.value)}
+                                >
+                                    <option value="general">General</option>
+                                    <option value="nails">Nails</option>
+                                    <option value="designs">Designs</option>
+                                </select>
+                                {savingCatId === img.id && (
+                                    <span className="text-neutral-500">Saving…</span>
+                                )}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <button className="btn btn-ghost" onClick={() => setEditing(img)}>
+                                    Edit
+                                </button>
+                                <button className="btn btn-ghost" onClick={() => remove(img)}>
+                                    Delete
+                                </button>
+                            </div>
                         </div>
                     </div>
                 ))}
             </div>
 
+            {editing && (
+                <EditImageModal image={editing} onClose={() => setEditing(null)} />
+            )}
         </section>
     );
 }
+
+
+/* ===================== Signature Looks Editor ===================== */
+
+function SignatureLooksEditor() {
+    const [looks, setLooks] = useState([]);
+    const [title, setTitle] = useState("");
+    const [desc, setDesc] = useState("");
+    const [file, setFile] = useState(null);
+    const [picked, setPicked] = useState(null);
+    const [showLib, setShowLib] = useState(false);
+    const [uploadPct, setUploadPct] = useState(null);
+    const [busy, setBusy] = useState(false);
+
+    useEffect(() => {
+        const q = query(collection(db, "signatureLooks"), orderBy("order", "asc"), orderBy("createdAt", "asc"));
+        return onSnapshot(q, (snap) => setLooks(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+    }, []);
+
+    function nextOrder() {
+        if (!looks.length) return 1;
+        return Math.max(...looks.map((l) => l.order ?? 0)) + 1;
+    }
+
+    async function addLook(e) {
+        e.preventDefault();
+        if (!title.trim()) return alert("Title is required");
+        if (!file && !picked) return alert("Pick an image");
+
+        setBusy(true);
+        try {
+            let imgUrl, path, name, size, source;
+
+            if (file) {
+                const p = `signature/${Date.now()}_${file.name}`;
+                const r = ref(storage, p);
+                const task = uploadBytesResumable(r, file);
+
+                await new Promise((resolve, reject) => {
+                    task.on(
+                        "state_changed",
+                        (snap) => setUploadPct(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
+                        reject,
+                        resolve
+                    );
+                });
+
+                imgUrl = await getDownloadURL(task.snapshot.ref);
+                path = p;
+                name = file.name.toLowerCase();
+                size = file.size;
+                source = "upload";
+            } else if (picked) {
+                imgUrl = picked.url;
+                path = picked.path || null;
+                name = picked.name || "";
+                size = picked.size || 0;
+                source = "library";
+            }
+
+            await addDoc(collection(db, "signatureLooks"), {
+                title: title.trim(),
+                desc: desc.trim(),
+                imgUrl,
+                path,
+                name,
+                size,
+                source,
+                order: nextOrder(),
+                enabled: true,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+            });
+
+            setTitle(""); setDesc(""); setFile(null); setPicked(null);
+        } finally {
+            setBusy(false);
+            setUploadPct(null);
+        }
+    }
+
+    async function move(id, dir) {
+        // dir: -1 up, +1 down
+        const idx = looks.findIndex((l) => l.id === id);
+        if (idx < 0) return;
+        const swapIdx = idx + dir;
+        if (swapIdx < 0 || swapIdx >= looks.length) return;
+
+        const a = looks[idx], b = looks[swapIdx];
+        await Promise.all([
+            updateDoc(doc(db, "signatureLooks", a.id), { order: (b.order ?? 0), updatedAt: serverTimestamp() }),
+            updateDoc(doc(db, "signatureLooks", b.id), { order: (a.order ?? 0), updatedAt: serverTimestamp() }),
+        ]);
+    }
+
+    async function removeLook(look) {
+        const ok = confirm("Delete this card?");
+        if (!ok) return;
+        try {
+            await deleteDoc(doc(db, "signatureLooks", look.id));
+            if (look.path) await deleteObject(ref(storage, look.path)).catch(() => { });
+        } catch (e) {
+            console.error(e);
+            alert("Couldn’t delete.");
+        }
+    }
+
+    return (
+        <section className="bg-white border rounded-2xl p-4 shadow-soft space-y-4">
+            <h2 className="font-semibold">Signature Looks</h2>
+
+            {/* Add new */}
+            <form className="grid md:grid-cols-3 gap-3 items-start" onSubmit={addLook}>
+                <div className="md:col-span-2 grid gap-3">
+                    <input
+                        className="border rounded-lg px-3 py-2 w-full"
+                        placeholder="Title (e.g., Swarovski/Diamonds)"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                    />
+                    <input
+                        className="border rounded-lg px-3 py-2 w-full"
+                        placeholder="Description"
+                        value={desc}
+                        onChange={(e) => setDesc(e.target.value)}
+                    />
+                    <div className="flex flex-wrap items-center gap-3">
+                        <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+                        <button type="button" className="btn btn-ghost" onClick={() => setShowLib(true)}>
+                            Choose from Library
+                        </button>
+                        {picked && <img src={picked.url} alt="" className="h-12 rounded" />}
+                    </div>
+                    {uploadPct != null && <ProgressBar value={uploadPct} />}
+                </div>
+                <div className="md:pl-3">
+                    <button className="btn btn-primary w-full md:w-auto" disabled={busy}>
+                        {busy ? (uploadPct != null ? `Uploading ${uploadPct}%…` : "Adding…") : "Add Card"}
+                    </button>
+                </div>
+            </form>
+
+            {/* List / edit */}
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {looks.map((l, i) => (
+                    <LookCardEditor
+                        key={l.id}
+                        look={l}
+                        index={i}
+                        total={looks.length}
+                        onMoveUp={() => move(l.id, -1)}
+                        onMoveDown={() => move(l.id, +1)}
+                        onDelete={() => removeLook(l)}
+                    />
+                ))}
+            </div>
+
+            <MediaLibraryModal open={showLib} onClose={() => setShowLib(false)} onSelect={setPicked} />
+        </section>
+    );
+}
+
+function LookCardEditor({ look, index, total, onMoveUp, onMoveDown, onDelete }) {
+    const [title, setTitle] = useState(look.title || "");
+    const [desc, setDesc] = useState(look.desc || "");
+    const [enabled, setEnabled] = useState(look.enabled !== false);
+
+    const [file, setFile] = useState(null);
+    const [picked, setPicked] = useState(null);
+    const [showLib, setShowLib] = useState(false);
+    const [uploadPct, setUploadPct] = useState(null);
+    const [busy, setBusy] = useState(false);
+    const [deleteOld, setDeleteOld] = useState(true);
+
+    useEffect(() => {
+        setTitle(look.title || "");
+        setDesc(look.desc || "");
+        setEnabled(look.enabled !== false);
+        setFile(null); setPicked(null); setUploadPct(null);
+    }, [look.id]);
+
+    async function save() {
+        setBusy(true);
+        try {
+            let imgUrl = look.imgUrl, path = look.path, name = look.name, size = look.size, source = look.source;
+
+            if (file || picked) {
+                if (file) {
+                    const p = `signature/${Date.now()}_${file.name}`;
+                    const r = ref(storage, p);
+                    const task = uploadBytesResumable(r, file);
+                    await new Promise((resolve, reject) => {
+                        task.on(
+                            "state_changed",
+                            (snap) => setUploadPct(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
+                            reject,
+                            resolve
+                        );
+                    });
+                    imgUrl = await getDownloadURL(task.snapshot.ref);
+                    path = p; name = file.name.toLowerCase(); size = file.size; source = "upload";
+                } else if (picked) {
+                    imgUrl = picked.url; path = picked.path || null; name = picked.name || name; size = picked.size || size; source = "library";
+                }
+                if (deleteOld && look.path && look.path !== path) {
+                    await deleteObject(ref(storage, look.path)).catch(() => { });
+                }
+            }
+
+            await updateDoc(doc(db, "signatureLooks", look.id), {
+                title: title.trim(),
+                desc: desc.trim(),
+                imgUrl,
+                path,
+                name,
+                size,
+                source,
+                enabled,
+                updatedAt: serverTimestamp(),
+            });
+        } finally {
+            setBusy(false);
+            setUploadPct(null);
+        }
+    }
+
+    return (
+        <div className="bg-white border rounded-2xl overflow-hidden shadow-soft">
+            <div className="relative aspect-[16/9] bg-neutral-100">
+                <img src={file ? URL.createObjectURL(file) : picked?.url || look.imgUrl}
+                    alt="" className="absolute inset-0 h-full w-full object-cover" />
+            </div>
+
+            <div className="p-3 space-y-2 text-sm">
+                <input className="w-full border rounded-lg px-3 py-2"
+                    value={title} onChange={(e) => setTitle(e.target.value)} />
+                <input className="w-full border rounded-lg px-3 py-2"
+                    value={desc} onChange={(e) => setDesc(e.target.value)} />
+
+                <div className="flex flex-wrap items-center gap-2">
+                    <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+                    <button type="button" className="btn btn-ghost" onClick={() => setShowLib(true)}>Choose from Library</button>
+                    {(file || picked) && (
+                        <label className="flex items-center gap-2">
+                            <input type="checkbox" checked={deleteOld} onChange={(e) => setDeleteOld(e.target.checked)} />
+                            <span>Delete old file</span>
+                        </label>
+                    )}
+                </div>
+
+                {uploadPct != null && <ProgressBar value={uploadPct} />}
+
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <button className="btn btn-ghost" onClick={onMoveUp} disabled={index === 0}>↑</button>
+                        <button className="btn btn-ghost" onClick={onMoveDown} disabled={index === total - 1}>↓</button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <label className="flex items-center gap-2">
+                            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+                            <span>Visible</span>
+                        </label>
+                        <button className="btn btn-ghost" onClick={onDelete}>Delete</button>
+                        <button className="btn btn-primary" onClick={save} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+                    </div>
+                </div>
+            </div>
+
+            <MediaLibraryModal open={showLib} onClose={() => setShowLib(false)} onSelect={setPicked} />
+        </div>
+    );
+}
+
+

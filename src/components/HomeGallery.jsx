@@ -29,8 +29,8 @@ export default function HomeGallery() {
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4">
                     {items.map((img) => (
-                        <div key={img.id} className="group overflow-hidden rounded-2xl bg-white ring-1 ring-black/5 shadow-soft">
-                            <div className="aspect-[4/3] bg-neutral-100">
+                        <div key={img.id} className="group overflow-hidden rounded-2xl">
+                            <div className="aspect-[4/3] bg-transparent">
                                 <img
                                     src={img.url}
                                     alt=""

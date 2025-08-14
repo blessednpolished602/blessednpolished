@@ -1,45 +1,92 @@
 // src/components/HomeServices.jsx
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { db } from "../lib/firebase";
+import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 
-const items = [
-    {
-        key: "bling",
-        title: "Swarovski/Diamonds",
-        desc: "Genuine Swarovski crystals hand-set — accent nails or full bling.",
-    },
-    {
-        key: "xxl",
-        title: "XXL Nail Art",
-        desc: "Sculpted extra-long set with custom art, charms, foils & encapsulation.",
-    },
-    {
-        key: "xxxl",
-        title: "XXXL Extreme Length",
-        desc: "Ultra-long statement nails with 3D/encapsulated design work.",
-    },
+const FALLBACK = [
+    { key: "bling", title: "Swarovski/Diamonds", desc: "Genuine Swarovski crystals hand-set — accent nails or full bling." },
+    { key: "xxl", title: "XXL Nail Art", desc: "Sculpted extra-long set with custom art, charms, foils & encapsulation." },
+    { key: "xxxl", title: "XXXL Extreme Length", desc: "Ultra-long statement nails with 3D/encapsulated design work." },
 ];
 
-export default function HomeServices() {
+export default function HomeServices({ showViewAll }) {
+    const { pathname } = useLocation();
+    // default behavior: hide the link on /services, show elsewhere
+    const showLink = showViewAll ?? pathname !== "/services";
+
+    const [items, setItems] = useState(null);
+
+    useEffect(() => {
+        const col = collection(db, "signatureLooks");
+
+        const apply = (snap) => {
+            const docs = snap.docs
+                .map((d) => ({ id: d.id, ...d.data() }))
+                .filter((x) => x.enabled !== false);
+            setItems(docs.length ? docs : null);
+        };
+
+        let unsubMain = () => { };
+        let unsubFallback = () => { };
+
+        // Try composite index (order + createdAt); fall back if still building
+        unsubMain = onSnapshot(
+            query(col, orderBy("order", "asc"), orderBy("createdAt", "asc")),
+            apply,
+            (err) => {
+                if (err?.code === "failed-precondition") {
+                    unsubFallback = onSnapshot(query(col, orderBy("order", "asc")), apply);
+                } else {
+                    console.error(err);
+                }
+            }
+        );
+
+        return () => {
+            unsubMain && unsubMain();
+            unsubFallback && unsubFallback();
+        };
+    }, []);
+
+    const list = items ?? FALLBACK;
+
     return (
         <section id="services" className="py-12 md:py-16 scroll-mt-24 bg-transparent">
             <div className="mx-auto max-w-6xl px-4">
                 <div className="flex items-end justify-between mb-6">
                     <h2 className="text-2xl md:text-3xl font-bold">Signature Looks</h2>
-                    <Link to="/services" className="text-sm underline">View all</Link>
+                    {showLink && (
+                        <Link to="/services" className="text-sm underline">
+                            View all
+                        </Link>
+                    )}
                 </div>
 
-                <div className="grid md:grid-cols-3 gap-4">
-                    {items.map((s) => (
-                        <div key={s.key} className="rounded-2xl bg-white ring-1 ring-black/5 shadow-soft p-5">
-                            <div className="flex items-center gap-2">
+                {/* Responsive: 1-col on xs, 2-col on sm, 3-col on md+. Cap width on tiny screens */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
+                    {list.map((s, idx) => (
+                        <div
+                            key={s.id || s.key || idx}
+                            className="group w-full max-w-[420px] sm:max-w-none mx-auto
+                         rounded-2xl overflow-hidden bg-white ring-1 ring-black/5 shadow-soft
+                         transition hover:-translate-y-0.5 hover:shadow-xl"
+                        >
+                            {s.imgUrl && (
+                                <div className="relative aspect-[16/9] sm:aspect-[4/3]">
+                                    <img
+                                        src={s.imgUrl}
+                                        alt={s.alt || ""}
+                                        loading="lazy"
+                                        className="absolute inset-0 h-full w-full object-cover"
+                                    />
+                                    <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-black/5" />
+                                </div>
+                            )}
+                            <div className="p-5">
                                 <h3 className="font-semibold">{s.title}</h3>
-                                {s.badge && (
-                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-black text-white">
-                                        {s.badge}
-                                    </span>
-                                )}
+                                <p className="text-neutral-600 mt-2">{s.desc}</p>
                             </div>
-                            <p className="text-neutral-600 mt-2">{s.desc}</p>
                         </div>
                     ))}
                 </div>

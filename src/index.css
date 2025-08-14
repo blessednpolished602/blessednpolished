@@ -4,6 +4,13 @@
 
 /* App-wide primitives */
 
+/* src/index.css */
+html, body, #root {
+  overflow-x: hidden;
+  overflow-x: clip; /* prevents 100vw + padding shenanigans */
+}
+
+
 html {
   scroll-behavior: smooth;
 }
