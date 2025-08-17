@@ -15,7 +15,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <HashRouter>
       <Routes>
-        {/* Public pages share the App layout */}
+        {/* Public pages share the App layout good practice */}
         <Route element={<App />}>
           <Route index element={<Home />} />
           <Route path="services" element={<ServicesPage />} />
