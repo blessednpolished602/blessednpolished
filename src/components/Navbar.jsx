@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { auth } from "../lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import SocialLinks from "./SocialLinks"
 
 export default function Navbar() {
     const navigate = useNavigate();
@@ -191,6 +192,11 @@ export default function Navbar() {
                                             >
                                                 Book Now
                                             </Link>
+
+                                            {/* social icons */}
+                                            <div className="pt-4 flex justify-center">
+                                                <SocialLinks size={24} gap={18} monochrome={true} />
+                                            </div>
                                         </>
                                     );
                                 })()}
