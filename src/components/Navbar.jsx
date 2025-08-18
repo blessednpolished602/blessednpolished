@@ -53,6 +53,7 @@ export default function Navbar() {
                     <nav className="hidden sm:flex gap-6 text-sm text-neutral-700 items-center">
                         <button onClick={() => goHomeAndScroll("services")} className="hover:text-black">Services</button>
                         <button onClick={() => goHomeAndScroll("gallery")} className="hover:text-black">Gallery</button>
+                        <Link to="/technicians" className="hover:text-black">Technicians</Link>
                         <Link to="/book" className="hover:text-black">Booking</Link>
                         <Link to="/contact" className="hover:text-black">Contact</Link>
                         {isAuthed && (
@@ -145,6 +146,14 @@ export default function Navbar() {
                                             >
                                                 Gallery
                                             </button>
+                                            <Link
+                                                to="/technicians"
+                                                onClick={() => setOpen(false)}
+                                                className={`${itemBase} ${open ? "translate-x-0 opacity-100" : ""}`}
+                                                style={{ transitionDelay: open ? "80ms" : "0ms" }}
+                                            >
+                                                Technicians
+                                            </Link>
 
                                             <Link
                                                 to="/book"

@@ -29,42 +29,67 @@ export default function HomeTechnicians({ showViewAll }) {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-                    {(items ?? []).map((t) => (
-                        <div
-                            key={t.id}
-                            className="group w-full max-w-[420px] sm:max-w-none mx-auto rounded-2xl overflow-hidden bg-white ring-1 ring-black/5 shadow-soft transition hover:-translate-y-0.5 hover:shadow-xl"
-                        >
-                            {t.avatarUrl && (
-                                <div className="relative aspect-square">
-                                    <img src={t.avatarUrl} alt={t.name} loading="lazy"
-                                        className="absolute inset-0 h-full w-full object-cover" />
-                                    <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-black/5" />
-                                </div>
-                            )}
-                            <div className="p-5">
-                                <h3 className="font-semibold">{t.name}</h3>
-                                <p className="text-neutral-600 mt-1 text-sm">{t.role}</p>
-                                <p className="text-neutral-700 mt-2">{t.bio}</p>
+                    {(items ?? []).map((t) => {
+                        // same cover-picking logic as the page
+                        const cover =
+                            t.coverUrl ||
+                            t.heroUrl ||
+                            (Array.isArray(t.gallery) && t.gallery[0]) ||
+                            t.avatarUrl;
 
-                                <SocialLinks
-                                    className="mt-3"
-                                    size={18}
-                                    gap="gap-2"
-                                    fallback="none"            // <- DO NOT fall back to site defaults here
-                                    socials={t.socials}         // <- comes straight from Firestore
-                                />
+                        return (
+                            <article
+                                key={t.id}
+                                className="group rounded-2xl overflow-hidden ring-1 ring-black/5 shadow-soft transition hover:-translate-y-0.5 hover:shadow-xl"
+                                style={{ background: "linear-gradient(to bottom, #f9d6d1 0%, #ffffff 100%)" }}
+                            >
+                                {cover && (
+                                    <Link to={`/technicians/${t.id}`} className="block">
+                                        <div className="relative aspect-[16/9] sm:aspect-[4/3]">
+                                            <img
+                                                src={cover}
+                                                alt={t.name}
+                                                loading="lazy"
+                                                className="absolute inset-0 w-full h-full object-contain"
+                                            />
+                                            <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-black/5" />
+                                        </div>
+                                    </Link>
+                                )}
 
-                                <div className="mt-4 flex gap-3">
-                                    <Link to={`/technicians/${t.id}`} className="underline text-sm">View profile</Link>
-                                    {t.squareStaffId && (
-                                        <Link to={`/book/${t.id}`} className="underline text-sm">
-                                            Book {t.name.split(" ")[0]}
+                                <div className="p-4 sm:p-5">
+                                    <h3 className="font-semibold text-base sm:text-lg">
+                                        <Link to={`/technicians/${t.id}`} className="hover:underline">
+                                            {t.name}
                                         </Link>
+                                    </h3>
+                                    <p className="text-neutral-600 mt-1.5 text-sm sm:text-[15px]">
+                                        {t.role || "Nail Artist"}
+                                    </p>
+
+                                    {t.bio && (
+                                        <p className="text-neutral-700 mt-2 text-sm sm:text-[15px]">{t.bio}</p>
                                     )}
+
+                                    {/* Social links are anchors; now they’re NOT nested in a Link */}
+                                    <div className="mt-3">
+                                        <SocialLinks className="mt-3" size={18} gap="gap-2" fallback="none" socials={t.socials} />
+                                    </div>
+
+                                    <div className="mt-4 flex gap-3">
+                                        <Link to={`/technicians/${t.id}`} className="underline text-sm">
+                                            View profile
+                                        </Link>
+                                        {t.squareStaffId && (
+                                            <Link to={`/book/${t.id}`} className="underline text-sm">
+                                                Book {t.name.split(" ")[0]}
+                                            </Link>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        </div>
-                    ))}
+                            </article>
+                        );
+                    })}
                 </div>
             </div>
         </section>

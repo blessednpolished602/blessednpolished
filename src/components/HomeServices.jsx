@@ -68,9 +68,8 @@ export default function HomeServices({ showViewAll }) {
                     {list.map((s, idx) => (
                         <div
                             key={s.id || s.key || idx}
-                            className="group w-full max-w-[420px] sm:max-w-none mx-auto
-                         rounded-2xl overflow-hidden bg-white ring-1 ring-black/5 shadow-soft
-                         transition hover:-translate-y-0.5 hover:shadow-xl"
+                            className="group w-full max-w-[420px] sm:max-w-none mx-auto rounded-2xl overflow-hidden ring-1 ring-black/5 shadow-soft transition hover:-translate-y-0.5 hover:shadow-xl"
+                            style={{ background: "linear-gradient(to bottom, #f9d6d1 0%, #ffffff 100%)" }}
                         >
                             {s.imgUrl && (
                                 <div className="relative aspect-[16/9] sm:aspect-[4/3]">
@@ -78,7 +77,7 @@ export default function HomeServices({ showViewAll }) {
                                         src={s.imgUrl}
                                         alt={s.alt || ""}
                                         loading="lazy"
-                                        className="absolute inset-0 h-full w-full object-cover"
+                                        className="absolute inset-0 h-full w-full object-contain"
                                     />
                                     <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-black/5" />
                                 </div>
@@ -88,6 +87,7 @@ export default function HomeServices({ showViewAll }) {
                                 <p className="text-neutral-600 mt-2">{s.desc}</p>
                             </div>
                         </div>
+
                     ))}
                 </div>
             </div>

@@ -4,10 +4,12 @@ import { useParams, Link } from "react-router-dom";
 import { db } from "../lib/firebase";
 import { doc, onSnapshot } from "firebase/firestore";
 import SocialLinks from "../components/SocialLinks";
+import Lightbox from "../components/Lightbox";
 
 export default function TechnicianDetailPage() {
     const { techId } = useParams();
     const [tech, setTech] = useState(null);
+    const [activeIndex, setActiveIndex] = useState(null);
 
     useEffect(() => {
         if (!techId) return;
@@ -40,13 +42,38 @@ export default function TechnicianDetailPage() {
                 {Array.isArray(tech.gallery) && tech.gallery.length > 0 && (
                     <>
                         <h2 className="text-xl font-semibold mt-10">Portfolio</h2>
+
+                        {/* THUMB GRID (same look as Gallery page) */}
                         <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                             {tech.gallery.map((src, i) => (
-                                <img key={i} src={src} alt={`${tech.name} ${i + 1}`} className="aspect-square w-full object-cover rounded-xl" loading="lazy" />
+                                <button
+                                    key={i}
+                                    onClick={() => setActiveIndex(i)}
+                                    className="group block rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition overflow-hidden"
+                                >
+                                    <div className="aspect-[4/3] bg-transparent">
+                                        <img
+                                            src={src}
+                                            alt={`${tech.name} ${i + 1}`}
+                                            loading="lazy"
+                                            className="w-full h-full object-contain p-1 transition-transform duration-300 group-hover:scale-[1.02]"
+                                        />
+                                    </div>
+                                </button>
                             ))}
                         </div>
+
+                        {/* LIGHTBOX */}
+                        {activeIndex != null && (
+                            <Lightbox
+                                images={tech.gallery}             // array of strings is OK
+                                index={activeIndex}
+                                onClose={() => setActiveIndex(null)}
+                            />
+                        )}
                     </>
                 )}
+
             </section>
         </main>
     );
