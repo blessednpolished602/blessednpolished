@@ -31,6 +31,7 @@ import {
 
 import useSiteSettings from "../hooks/useSiteSettings";
 import MediaLibraryModal from "../components/MediaLibraryModal";
+import { arrayUnion, arrayRemove } from "firebase/firestore";
 
 
 
@@ -82,6 +83,7 @@ export default function Admin() {
 
             <HeroEditor />
             <SignatureLooksEditor />
+            <TechniciansManager />
             <GalleryUploader />
             <GalleryManager />
         </div>
@@ -713,4 +715,339 @@ function LookCardEditor({ look, index, total, onMoveUp, onMoveDown, onDelete }) 
     );
 }
 
+/* ===================== Technicians Manager ===================== */
+
+
+function slugify(s = "") {
+    return s
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "")
+        .replace(/(^_|_$)/g, "")
+        .trim();
+}
+
+function TechniciansManager() {
+    const [techs, setTechs] = useState([]);
+    const [adding, setAdding] = useState(false);
+    const [newTech, setNewTech] = useState({
+        id: "",
+        name: "",
+        role: "Nail Artist",
+        bio: "",
+        instagram: "",
+        facebook: "",
+        tiktok: "",
+        email: "/contact",
+        tags: "",
+    });
+
+    useEffect(() => {
+        const q = query(collection(db, "technicians"), orderBy("name", "asc"));
+        return onSnapshot(q, (snap) =>
+            setTechs(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+        );
+    }, []);
+
+    async function addTech(e) {
+        e.preventDefault();
+        if (!newTech.name.trim()) return alert("Name is required");
+        const id = newTech.id.trim() || slugify(newTech.name);
+        setAdding(true);
+        try {
+            await setDoc(doc(db, "technicians", id), {
+                name: newTech.name.trim(),
+                role: newTech.role.trim(),
+                bio: newTech.bio.trim(),
+                tags: newTech.tags
+                    ? newTech.tags.split(",").map(t => t.trim()).filter(Boolean)
+                    : [],
+                avatarUrl: "", // will set after upload
+                socials: {
+                    instagram: newTech.instagram || "",
+                    facebook: newTech.facebook || "",
+                    tiktok: newTech.tiktok || "",
+                    email: newTech.email || "/contact",
+                },
+                squareStaffId: "",
+                gallery: [],
+                enabled: true,
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+            }, { merge: true });
+
+            setNewTech({
+                id: "",
+                name: "",
+                role: "Nail Artist",
+                bio: "",
+                instagram: "",
+                facebook: "",
+                tiktok: "",
+                email: "/contact",
+                tags: "",
+            });
+        } finally {
+            setAdding(false);
+        }
+    }
+
+    return (
+        <section className="bg-white border rounded-2xl p-4 shadow-soft space-y-4">
+            <h2 className="font-semibold">Technicians</h2>
+
+            {/* Create new */}
+            <form className="grid md:grid-cols-3 gap-3 items-start" onSubmit={addTech}>
+                <div className="grid gap-3 md:col-span-2">
+                    <div className="grid sm:grid-cols-2 gap-3">
+                        <input className="border rounded-lg px-3 py-2" placeholder="Tech ID (optional)"
+                            value={newTech.id}
+                            onChange={(e) => setNewTech(t => ({ ...t, id: e.target.value }))} />
+                        <input className="border rounded-lg px-3 py-2" placeholder="Name *"
+                            value={newTech.name}
+                            onChange={(e) => setNewTech(t => ({ ...t, name: e.target.value }))} />
+                    </div>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                        <input className="border rounded-lg px-3 py-2" placeholder="Role"
+                            value={newTech.role}
+                            onChange={(e) => setNewTech(t => ({ ...t, role: e.target.value }))} />
+                        <input className="border rounded-lg px-3 py-2" placeholder="Tags (comma separated)"
+                            value={newTech.tags}
+                            onChange={(e) => setNewTech(t => ({ ...t, tags: e.target.value }))} />
+                    </div>
+                    <textarea className="border rounded-lg px-3 py-2" placeholder="Bio"
+                        value={newTech.bio}
+                        onChange={(e) => setNewTech(t => ({ ...t, bio: e.target.value }))} />
+                    <div className="grid sm:grid-cols-4 gap-3">
+                        <input className="border rounded-lg px-3 py-2" placeholder="Instagram URL"
+                            value={newTech.instagram}
+                            onChange={(e) => setNewTech(t => ({ ...t, instagram: e.target.value }))} />
+                        <input className="border rounded-lg px-3 py-2" placeholder="Facebook URL"
+                            value={newTech.facebook}
+                            onChange={(e) => setNewTech(t => ({ ...t, facebook: e.target.value }))} />
+                        <input className="border rounded-lg px-3 py-2" placeholder="TikTok URL"
+                            value={newTech.tiktok}
+                            onChange={(e) => setNewTech(t => ({ ...t, tiktok: e.target.value }))} />
+                        <input className="border rounded-lg px-3 py-2" placeholder="Email or /contact"
+                            value={newTech.email}
+                            onChange={(e) => setNewTech(t => ({ ...t, email: e.target.value }))} />
+                    </div>
+                </div>
+                <div className="md:pl-3">
+                    <button className="btn btn-primary w-full md:w-auto" disabled={adding}>
+                        {adding ? "Adding…" : "Add Technician"}
+                    </button>
+                </div>
+            </form>
+
+            {/* List / edit */}
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {techs.map(t => <TechEditorCard key={t.id} tech={t} />)}
+            </div>
+        </section>
+    );
+}
+
+function TechEditorCard({ tech }) {
+    const [name, setName] = useState(tech.name || "");
+    const [role, setRole] = useState(tech.role || "");
+    const [bio, setBio] = useState(tech.bio || "");
+    const [enabled, setEnabled] = useState(tech.enabled !== false);
+    const [tags, setTags] = useState(tech.tags?.join(", ") || "");
+    const [socials, setSocials] = useState({
+        instagram: tech.socials?.instagram || "",
+        facebook: tech.socials?.facebook || "",
+        tiktok: tech.socials?.tiktok || "",
+        email: tech.socials?.email || "/contact",
+    });
+    const [staffId, setStaffId] = useState(tech.squareStaffId || "");
+    const [avatarFile, setAvatarFile] = useState(null);
+    const [uploadPct, setUploadPct] = useState(null);
+    const [saving, setSaving] = useState(false);
+    const [addingImg, setAddingImg] = useState(false);
+    const [galleryFile, setGalleryFile] = useState(null);
+    const [galleryPct, setGalleryPct] = useState(null);
+
+    useEffect(() => {
+        setName(tech.name || "");
+        setRole(tech.role || "");
+        setBio(tech.bio || "");
+        setEnabled(tech.enabled !== false);
+        setTags(tech.tags?.join(", ") || "");
+        setSocials({
+            instagram: tech.socials?.instagram || "",
+            facebook: tech.socials?.facebook || "",
+            tiktok: tech.socials?.tiktok || "",
+            email: tech.socials?.email || "/contact",
+        });
+        setStaffId(tech.squareStaffId || "");
+        setAvatarFile(null);
+        setUploadPct(null);
+    }, [tech.id]);
+
+    async function save() {
+        setSaving(true);
+        try {
+            let avatarUrl = tech.avatarUrl || "";
+
+            if (avatarFile) {
+                const ext = avatarFile.name.split(".").pop();
+                const p = `avatars/${tech.id}_${Date.now()}.${ext}`;
+                const r = ref(storage, p);
+                const task = uploadBytesResumable(r, avatarFile);
+                await new Promise((resolve, reject) => {
+                    task.on(
+                        "state_changed",
+                        (s) => setUploadPct(Math.round((s.bytesTransferred / s.totalBytes) * 100)),
+                        reject,
+                        resolve
+                    );
+                });
+                avatarUrl = await getDownloadURL(task.snapshot.ref);
+            }
+
+            await updateDoc(doc(db, "technicians", tech.id), {
+                name: name.trim(),
+                role: role.trim(),
+                bio: bio.trim(),
+                tags: tags ? tags.split(",").map(t => t.trim()).filter(Boolean) : [],
+                socials,
+                squareStaffId: staffId.trim(),
+                avatarUrl,
+                enabled,
+                updatedAt: serverTimestamp(),
+            });
+        } finally {
+            setSaving(false);
+            setUploadPct(null);
+            setAvatarFile(null);
+        }
+    }
+
+    async function remove() {
+        if (!confirm(`Delete ${tech.name}?`)) return;
+        await deleteDoc(doc(db, "technicians", tech.id));
+    }
+
+    // Add a photo to gallery[] (array of URLs)
+    async function addToGallery(e) {
+        e.preventDefault();
+        if (!galleryFile) return;
+        setAddingImg(true);
+        try {
+            const ext = galleryFile.name.split(".").pop();
+            const p = `portfolios/${tech.id}/${Date.now()}_${galleryFile.name}`;
+            const r = ref(storage, p);
+            const task = uploadBytesResumable(r, galleryFile);
+            await new Promise((resolve, reject) => {
+                task.on(
+                    "state_changed",
+                    (s) => setGalleryPct(Math.round((s.bytesTransferred / s.totalBytes) * 100)),
+                    reject,
+                    resolve
+                );
+            });
+            const url = await getDownloadURL(task.snapshot.ref);
+            await updateDoc(doc(db, "technicians", tech.id), {
+                gallery: arrayUnion(url),
+                updatedAt: serverTimestamp(),
+            });
+            setGalleryFile(null);
+        } finally {
+            setAddingImg(false);
+            setGalleryPct(null);
+        }
+    }
+
+    async function removeFromGallery(url) {
+        if (!confirm("Remove image from gallery?")) return;
+        await updateDoc(doc(db, "technicians", tech.id), {
+            gallery: arrayRemove(url),
+            updatedAt: serverTimestamp(),
+        });
+    }
+
+    return (
+        <div className="bg-white border rounded-2xl overflow-hidden shadow-soft">
+            {/* Avatar */}
+            <div className="relative aspect-[4/3] bg-neutral-100">
+                <img
+                    src={avatarFile ? URL.createObjectURL(avatarFile) : tech.avatarUrl}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                />
+            </div>
+
+            <div className="p-4 space-y-3 text-sm">
+                <div className="grid sm:grid-cols-2 gap-2">
+                    <input className="border rounded-lg px-3 py-2" value={name} onChange={(e) => setName(e.target.value)} />
+                    <input className="border rounded-lg px-3 py-2" value={role} onChange={(e) => setRole(e.target.value)} />
+                </div>
+                <textarea className="border rounded-lg px-3 py-2" value={bio} onChange={(e) => setBio(e.target.value)} />
+                <input className="border rounded-lg px-3 py-2" placeholder="Tags (comma separated)" value={tags} onChange={(e) => setTags(e.target.value)} />
+
+                {/* Socials */}
+                <div className="grid sm:grid-cols-2 gap-2">
+                    <input className="border rounded-lg px-3 py-2" placeholder="Instagram URL"
+                        value={socials.instagram} onChange={(e) => setSocials(s => ({ ...s, instagram: e.target.value }))} />
+                    <input className="border rounded-lg px-3 py-2" placeholder="Facebook URL"
+                        value={socials.facebook} onChange={(e) => setSocials(s => ({ ...s, facebook: e.target.value }))} />
+                    <input className="border rounded-lg px-3 py-2" placeholder="TikTok URL"
+                        value={socials.tiktok} onChange={(e) => setSocials(s => ({ ...s, tiktok: e.target.value }))} />
+                    <input className="border rounded-lg px-3 py-2" placeholder="Email or /contact"
+                        value={socials.email} onChange={(e) => setSocials(s => ({ ...s, email: e.target.value }))} />
+                </div>
+
+                {/* Square staff id */}
+                <input className="border rounded-lg px-3 py-2" placeholder="Square staff ID (optional)"
+                    value={staffId} onChange={(e) => setStaffId(e.target.value)} />
+
+                {/* Avatar upload */}
+                <div className="flex flex-wrap items-center gap-3">
+                    <input type="file" accept="image/*" onChange={(e) => setAvatarFile(e.target.files?.[0] || null)} />
+                    {uploadPct != null && <ProgressBar value={uploadPct} />}
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2">
+                        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+                        <span>Visible</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                        <button className="btn btn-ghost" onClick={remove}>Delete</button>
+                        <button className="btn btn-primary" onClick={save} disabled={saving}>
+                            {saving ? "Saving…" : "Save"}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Gallery quick add */}
+                <div className="mt-3 border-t pt-3">
+                    <h4 className="font-medium mb-2">Portfolio</h4>
+                    <form className="flex flex-wrap items-center gap-3" onSubmit={addToGallery}>
+                        <input type="file" accept="image/*" onChange={(e) => setGalleryFile(e.target.files?.[0] || null)} />
+                        <button className="btn btn-ghost" disabled={!galleryFile || addingImg}>
+                            {addingImg ? (galleryPct != null ? `Uploading ${galleryPct}%…` : "Adding…") : "Add to Gallery"}
+                        </button>
+                    </form>
+                    {galleryPct != null && <ProgressBar value={galleryPct} />}
+
+                    {Array.isArray(tech.gallery) && tech.gallery.length > 0 && (
+                        <div className="mt-3 grid grid-cols-3 gap-2">
+                            {tech.gallery.map((u, i) => (
+                                <div key={i} className="relative">
+                                    <img src={u} alt="" className="aspect-square w-full object-cover rounded-lg" />
+                                    <button type="button" onClick={() => removeFromGallery(u)}
+                                        className="absolute top-1 right-1 text-xs bg-white/90 rounded px-2 py-1">
+                                        Remove
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
 

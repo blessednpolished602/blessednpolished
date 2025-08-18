@@ -6,10 +6,14 @@ import Home from "./pages/Home.jsx";
 import Admin from "./pages/Admin.jsx";
 import ServicesPage from "./pages/ServicesPage.jsx";
 import GalleryPage from "./pages/GalleryPage.jsx";
-import BookingPage from "./pages/BookingPage.jsx";
+import BookingPage from "./pages/BookingPage.jsx";      // now supports /book and /book/:techId
 import ContactPage from "./pages/ContactPage.jsx";
-import "./index.css";
 
+// NEW
+import TechniciansPage from "./pages/TechniciansPage.jsx";
+import TechnicianDetailPage from "./pages/TechnicianDetailPage.jsx";
+
+import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
@@ -20,7 +24,12 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route index element={<Home />} />
           <Route path="services" element={<ServicesPage />} />
           <Route path="gallery" element={<GalleryPage />} />
+          {/* Booking: general + per-tech deep link */}
           <Route path="book" element={<BookingPage />} />
+          <Route path="book/:techId" element={<BookingPage />} />
+          {/* Technicians */}
+          <Route path="technicians" element={<TechniciansPage />} />
+          <Route path="technicians/:techId" element={<TechnicianDetailPage />} />
           <Route path="contact" element={<ContactPage />} />
         </Route>
 
