@@ -15,6 +15,10 @@ export default function SocialLinks({
     brand = false,
     links,      // optional advanced override (array)
     socials,    // <-- use this for technician cards
+    // NEW: make envelope go to /contact instead of mailto:
+    emailAsContact = false,
+    contactPath = "/contact",
+    contactQuery = {},         // e.g. { tech: "Alyssa", source: "tech-card" }
 }) {
     const defaultLinks = [
         { label: "Instagram", type: "external", Icon: FaInstagram, href: "https://www.instagram.com/reinakatrina84/", color: "#E1306C" },
@@ -23,18 +27,25 @@ export default function SocialLinks({
         { label: "Contact", type: "internal", Icon: FaEnvelope, to: "/contact", color: "#6B7280" },
     ];
 
+    const qs = new URLSearchParams(contactQuery).toString();
+    const contactHref = qs ? `${contactPath}?${qs}` : contactPath;
+
     // Map simple socials object -> link array
     const mappedFromSocials = socials
         ? [
             socials.instagram && { label: "Instagram", type: "external", Icon: FaInstagram, href: socials.instagram, color: "#E1306C" },
             socials.facebook && { label: "Facebook", type: "external", Icon: FaFacebookF, href: socials.facebook, color: "#1877F2" },
             socials.tiktok && { label: "TikTok", type: "external", Icon: SiTiktok, href: socials.tiktok, color: "#000000" },
-            socials.website && { label: "Website", type: "external", Icon: FaEnvelope, href: socials.website, color: "#6B7280" },
-            socials.email && { label: "Email", type: "external", Icon: FaEnvelope, href: `mailto:${socials.email}`, color: "#6B7280" },
+            // (optional) website uses globe icon
+            socials.website && { label: "Website", type: "external", Icon: FaGlobe, href: socials.website, color: "#6B7280" },
+            // Email -> Contact page (internal) if emailAsContact, else mailto:
+            socials.email &&
+            (emailAsContact
+                ? { label: "Contact", type: "internal", Icon: FaEnvelope, to: contactHref, color: "#6B7280" }
+                : { label: "Email", type: "external", Icon: FaEnvelope, href: `mailto:${socials.email}`, color: "#6B7280" }),
         ].filter(Boolean)
         : null;
 
-    // Only use a prop if it has items; otherwise fall back
     const hasCustom = Array.isArray(links) && links.length > 0;
     const hasMapped = Array.isArray(mappedFromSocials) && mappedFromSocials.length > 0;
     const finalLinks = hasCustom ? links : (hasMapped ? mappedFromSocials : defaultLinks);
@@ -45,15 +56,12 @@ export default function SocialLinks({
         "hover:-translate-y-0.5 focus:outline-none focus-visible:ring focus-visible:ring-black/10";
 
     return (
-        <nav
-            aria-label="Social media"
-            className={`flex items-center justify-center w-full ${gap} ${className}`}
-        >
+        <nav aria-label="Social media" className={`flex items-center justify-center w-full ${gap} ${className}`}>
             {finalLinks.map(({ label, type, Icon, href, to, color }) =>
                 type === "external" ? (
                     <a
                         key={label}
-                        href={href}
+                        href={/^(https?:|mailto:)/i.test(href) ? href : `https://${href}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         aria-label={label}

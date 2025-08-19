@@ -1,4 +1,6 @@
-import { useState, useRef } from "react";
+// src/pages/ContactPage.jsx
+import { useState, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { db } from "../lib/firebase";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import useSiteSettings from "../hooks/useSiteSettings";
@@ -7,11 +9,26 @@ import emailjs from "@emailjs/browser";
 export default function ContactPage() {
     const s = useSiteSettings();
 
-    const [form, setForm] = useState({ name: "", email: "", phone: "", message: "" });
+    // read ?tech= from URL (e.g., /contact?tech=Elysia)
+    const [params] = useSearchParams();
+    const defaultTech = params.get("tech") || "";
+
+    const [form, setForm] = useState({
+        name: "",
+        email: "",
+        phone: "",
+        message: "",
+        tech: defaultTech, // prefill from URL
+    });
     const [busy, setBusy] = useState(false);
     const [sent, setSent] = useState(false);
     const [err, setErr] = useState("");
     const trap = useRef(null); // honeypot
+
+    // keep tech in sync if the URL changes while on the page
+    useEffect(() => {
+        setForm((f) => ({ ...f, tech: defaultTech }));
+    }, [defaultTech]);
 
     // ---- Public contact info (safe defaults) ----
     const phone = s?.phone || ""; // leave blank to hide phone
@@ -42,7 +59,7 @@ export default function ContactPage() {
                 source: "website",
             });
 
-            // 2) Email via EmailJS
+            // 2) Email via EmailJS (ensure your template has a {{tech}} variable)
             const SERVICE_ID = import.meta.env.VITE_EMAILJS_SERVICE_ID;
             const TEMPLATE_ID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID;
             const PUBLIC_KEY = import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
@@ -56,13 +73,15 @@ export default function ContactPage() {
                     email: form.email || "no-email@site",
                     phone: form.phone || "n/a",
                     message: form.message,
+                    tech: form.tech || "No preference",
                     time: new Date().toLocaleString(),
                 },
                 PUBLIC_KEY
             );
 
             setSent(true);
-            setForm({ name: "", email: "", phone: "", message: "" });
+            // reset but keep defaultTech if they want to send another with same choice
+            setForm({ name: "", email: "", phone: "", message: "", tech: defaultTech });
         } catch (e) {
             console.error(e);
             setErr("Couldn’t send right now. Please try again.");
@@ -174,6 +193,20 @@ export default function ContactPage() {
                                     placeholder="name@email.com"
                                 />
                                 <p className="text-xs text-neutral-500 mt-1">Add email or phone (either one works).</p>
+                            </div>
+
+                            {/* NEW: Preferred technician (prefilled from ?tech=) */}
+                            <div>
+                                <label className="block text-sm mb-1">Preferred technician</label>
+                                <input
+                                    className="w-full border rounded-lg px-3 py-2"
+                                    value={form.tech}
+                                    onChange={(e) => setForm((f) => ({ ...f, tech: e.target.value }))}
+                                    placeholder="Optional (e.g., Elysia)"
+                                />
+                                {/* If you prefer hidden only, keep this instead:
+                <input type="hidden" name="tech" value={form.tech} />
+                */}
                             </div>
 
                             <div>

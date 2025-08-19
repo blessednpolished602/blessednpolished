@@ -6,6 +6,7 @@ import { doc, onSnapshot } from "firebase/firestore";
 import SocialLinks from "../components/SocialLinks";
 import Lightbox from "../components/Lightbox";
 
+
 export default function TechnicianDetailPage() {
     const { techId } = useParams();
     const [tech, setTech] = useState(null);
@@ -34,7 +35,14 @@ export default function TechnicianDetailPage() {
                         <p className="mt-4 max-w-2xl text-neutral-700">{tech.bio}</p>
                         <div className="mt-4 flex items-center gap-4">
                             {tech.squareStaffId && <Link to={`/book/${tech.id}`} className="underline text-sm">Book with {tech.name.split(" ")[0]}</Link>}
-                            <SocialLinks socials={tech.socials} fallback="none" />
+                            <SocialLinks
+                                className="mt-3"
+                                size={18}
+                                gap="gap-2"
+                                socials={tech.socials}
+                                emailAsContact={true}
+                                contactQuery={{ tech: tech.name, source: "tech-card" }}
+                            />
                         </div>
                     </div>
                 </div>

@@ -74,7 +74,7 @@ export default function TechniciansPage() {
 
                                 {/* SocialLinks stays as real <a> tags — no nesting now */}
                                 <div className="mt-3">
-                                    <SocialLinks className="mt-3" size={18} gap="gap-2" fallback="none" socials={t.socials} />
+                                    <SocialLinks className="mt-3" size={18} gap="gap-2" fallback="none" socials={t.socials} emailAsContact={true} contactQuery={{ tech: t.name, source: "tech-card" }} />
                                 </div>
 
                                 <div className="mt-4">
