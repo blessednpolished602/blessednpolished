@@ -2,27 +2,31 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { db } from "../lib/firebase";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import SocialLinks from "../components/SocialLinks";
 import Lightbox from "../components/Lightbox";
 
 
 export default function TechnicianDetailPage() {
     const { techId } = useParams();
-    const [tech, setTech] = useState(null);
+    const [tech, setTech] = useState(undefined); // undefined = loading, null = not found
     const [activeIndex, setActiveIndex] = useState(null);
 
     useEffect(() => {
         if (!techId) return;
-        return onSnapshot(doc(db, "technicians", techId), (d) => {
+        let cancelled = false;
+        setTech(undefined);
+        getDoc(doc(db, "technicians", techId)).then((d) => {
+            if (cancelled) return;
             setTech(d.exists() ? { id: d.id, ...d.data() } : null);
         });
+        return () => { cancelled = true; };
     }, [techId]);
 
+    if (tech === undefined) return <main className="p-10 text-neutral-500">Loading…</main>;
     if (tech === null) {
         return <main className="p-10">Not found. <Link to="/technicians" className="underline">Back</Link></main>;
     }
-    if (!tech) return null;
 
     return (
         <main className="min-h-screen">
@@ -55,16 +59,16 @@ export default function TechnicianDetailPage() {
                         <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                             {tech.gallery.map((src, i) => (
                                 <button
-                                    key={i}
+                                    key={src}
                                     onClick={() => setActiveIndex(i)}
                                     className="group block rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition overflow-hidden"
                                 >
-                                    <div className="aspect-[4/3] bg-neutral-100">
+                                    <div className="aspect-[4/3] bg-transparent">
                                         <img
                                             src={src}
                                             alt={`${tech.name} ${i + 1}`}
                                             loading="lazy"
-                                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                                            className="w-full h-full object-contain"
                                         />
                                     </div>
                                 </button>

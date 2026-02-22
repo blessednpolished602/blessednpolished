@@ -217,7 +217,9 @@ function HeroEditor() {
             <h2 className="font-semibold">Hero Content</h2>
 
             {s?.heroImage && (
-                <img src={s.heroImage} alt="" className="h-28 w-full object-cover rounded" />
+                <div className="w-full max-h-80 rounded overflow-hidden bg-neutral-100">
+                    <img src={s.heroImage} alt="" className="w-full h-full object-contain max-h-80" />
+                </div>
             )}
 
             <div className="flex items-center gap-2">

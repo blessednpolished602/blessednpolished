@@ -2,7 +2,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { db } from "../lib/firebase";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, getDocs, orderBy, query } from "firebase/firestore";
 
 const FALLBACK = [
     { key: "bling", title: "Swarovski/Diamonds", desc: "Genuine Swarovski crystals hand-set — accent nails or full bling." },
@@ -19,34 +19,29 @@ export default function HomeServices({ showViewAll }) {
 
     useEffect(() => {
         const col = collection(db, "signatureLooks");
+        let cancelled = false;
 
         const apply = (snap) => {
+            if (cancelled) return;
             const docs = snap.docs
                 .map((d) => ({ id: d.id, ...d.data() }))
                 .filter((x) => x.enabled !== false);
             setItems(docs.length ? docs : null);
         };
 
-        let unsubMain = () => { };
-        let unsubFallback = () => { };
-
         // Try composite index (order + createdAt); fall back if still building
-        unsubMain = onSnapshot(
-            query(col, orderBy("order", "asc"), orderBy("createdAt", "asc")),
-            apply,
-            (err) => {
+        getDocs(query(col, orderBy("order", "asc"), orderBy("createdAt", "asc")))
+            .then(apply)
+            .catch((err) => {
+                if (cancelled) return;
                 if (err?.code === "failed-precondition") {
-                    unsubFallback = onSnapshot(query(col, orderBy("order", "asc")), apply);
+                    getDocs(query(col, orderBy("order", "asc"))).then(apply).catch(console.error);
                 } else {
                     console.error(err);
                 }
-            }
-        );
+            });
 
-        return () => {
-            unsubMain && unsubMain();
-            unsubFallback && unsubFallback();
-        };
+        return () => { cancelled = true; };
     }, []);
 
     const list = items ?? FALLBACK;

@@ -1,7 +1,8 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { HashRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import App from "./App.jsx";
+import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import Home from "./pages/Home.jsx";
 import Admin from "./pages/Admin.jsx";
 import ServicesPage from "./pages/ServicesPage.jsx";
@@ -17,25 +18,27 @@ import "./index.css";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <HashRouter>
-      <Routes>
-        {/* Public pages share the App layout */}
-        <Route element={<App />}>
-          <Route index element={<Home />} />
-          <Route path="services" element={<ServicesPage />} />
-          <Route path="gallery" element={<GalleryPage />} />
-          {/* Booking: general + per-tech deep link */}
-          <Route path="book" element={<BookingPage />} />
-          <Route path="book/:techId" element={<BookingPage />} />
-          {/* Technicians */}
-          <Route path="technicians" element={<TechniciansPage />} />
-          <Route path="technicians/:techId" element={<TechnicianDetailPage />} />
-          <Route path="contact" element={<ContactPage />} />
-        </Route>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          {/* Public pages share the App layout */}
+          <Route element={<App />}>
+            <Route index element={<Home />} />
+            <Route path="services" element={<ServicesPage />} />
+            <Route path="gallery" element={<GalleryPage />} />
+            {/* Booking: general + per-tech deep link */}
+            <Route path="book" element={<BookingPage />} />
+            <Route path="book/:techId" element={<BookingPage />} />
+            {/* Technicians */}
+            <Route path="technicians" element={<TechniciansPage />} />
+            <Route path="technicians/:techId" element={<TechnicianDetailPage />} />
+            <Route path="contact" element={<ContactPage />} />
+          </Route>
 
-        {/* Admin stands alone (it renders its own Navbar) */}
-        <Route path="admin" element={<Admin />} />
-      </Routes>
-    </HashRouter>
+          {/* Admin stands alone (it renders its own Navbar) */}
+          <Route path="admin" element={<Admin />} />
+        </Routes>
+      </BrowserRouter>
+    </ErrorBoundary>
   </React.StrictMode>
 );
