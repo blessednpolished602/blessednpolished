@@ -24,5 +24,10 @@ dist-ssr
 *.sln
 *.sw?
 
+# Build artifacts accidentally tracked in the past (do not commit)
+assets/
+index.html
+404.html
+
 # Firebase service account credentials — never commit these
 serviceAccountKey.json
