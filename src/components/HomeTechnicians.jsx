@@ -50,7 +50,7 @@ export default function HomeTechnicians({ showViewAll }) {
                                                 src={cover}
                                                 alt={t.name}
                                                 loading="lazy"
-                                                className="absolute inset-0 w-full h-full object-contain"
+                                                className="absolute inset-0 w-full h-full object-cover"
                                             />
                                             <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-black/5" />
                                         </div>

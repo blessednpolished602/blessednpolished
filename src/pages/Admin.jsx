@@ -31,6 +31,7 @@ import {
 
 import useSiteSettings from "../hooks/useSiteSettings";
 import MediaLibraryModal from "../components/MediaLibraryModal";
+import Footer from "../components/Footer";
 import { arrayUnion, arrayRemove } from "firebase/firestore";
 
 
@@ -69,23 +70,26 @@ export default function Admin() {
     if (!user) return <LoginForm />;
 
     return (
-        <div className="mx-auto max-w-6xl p-6 space-y-10">
+        <div className="min-h-dvh w-full overflow-x-clip bg-gradient-to-b from-[#f9d6d1] to-white">
             <Navbar />
-            <header className="flex items-center justify-between">
-                <h1 className="text-2xl font-bold">Admin</h1>
-                <div className="flex items-center gap-3">
-                    <Link to="/" className="text-sm underline">View Site</Link>
-                    <button className="btn btn-ghost" onClick={() => signOut(auth)}>
-                        Sign out
-                    </button>
-                </div>
-            </header>
+            <div className="mx-auto max-w-6xl p-6 space-y-10">
+                <header className="flex items-center justify-between">
+                    <h1 className="text-2xl font-bold">Admin</h1>
+                    <div className="flex items-center gap-3">
+                        <Link to="/" className="text-sm underline">View Site</Link>
+                        <button className="btn btn-ghost" onClick={() => signOut(auth)}>
+                            Sign out
+                        </button>
+                    </div>
+                </header>
 
-            <HeroEditor />
-            <SignatureLooksEditor />
-            <TechniciansManager />
-            <GalleryUploader />
-            <GalleryManager />
+                <HeroEditor />
+                <SignatureLooksEditor />
+                <TechniciansManager />
+                <GalleryUploader />
+                <GalleryManager />
+            </div>
+            <Footer />
         </div>
     );
 }
@@ -109,31 +113,35 @@ function LoginForm() {
     }
 
     return (
-        <div className="min-h-screen grid place-items-center p-6">
-            <form
-                onSubmit={login}
-                className="w-full max-w-sm bg-white p-6 rounded-2xl border shadow-soft space-y-3"
-            >
-                <h2 className="text-lg font-semibold">Admin Login</h2>
-                <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    type="email"
-                    placeholder="Email"
-                    value={form.email}
-                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                />
-                <input
-                    className="w-full border rounded-lg px-3 py-2"
-                    type="password"
-                    placeholder="Password"
-                    value={form.password}
-                    onChange={(e) =>
-                        setForm((f) => ({ ...f, password: e.target.value }))
-                    }
-                />
-                {err && <p className="text-sm text-red-600">{err}</p>}
-                <button className="btn btn-primary w-full">Sign In</button>
-            </form>
+        <div className="min-h-dvh w-full overflow-x-clip bg-gradient-to-b from-[#f9d6d1] to-white">
+            <Navbar />
+            <main className="min-h-[calc(100vh-8rem)] grid place-items-center p-6">
+                <form
+                    onSubmit={login}
+                    className="w-full max-w-sm bg-white p-6 rounded-2xl border shadow-soft space-y-3"
+                >
+                    <h2 className="text-lg font-semibold">Admin Login</h2>
+                    <input
+                        className="w-full border rounded-lg px-3 py-2"
+                        type="email"
+                        placeholder="Email"
+                        value={form.email}
+                        onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                    />
+                    <input
+                        className="w-full border rounded-lg px-3 py-2"
+                        type="password"
+                        placeholder="Password"
+                        value={form.password}
+                        onChange={(e) =>
+                            setForm((f) => ({ ...f, password: e.target.value }))
+                        }
+                    />
+                    {err && <p className="text-sm text-red-600">{err}</p>}
+                    <button className="btn btn-primary w-full">Sign In</button>
+                </form>
+            </main>
+            <Footer />
         </div>
     );
 }
@@ -443,6 +451,120 @@ function GalleryManager() {
     );
 }
 
+
+/* ===================== Edit Image Modal ===================== */
+
+function EditImageModal({ image, onClose }) {
+    const [category, setCategory] = useState(image.category || "general");
+    const [caption, setCaption] = useState(image.caption || "");
+    const [featured, setFeatured] = useState(image.featured ?? false);
+    const [saving, setSaving] = useState(false);
+    const [err, setErr] = useState("");
+
+    async function save() {
+        setSaving(true);
+        setErr("");
+        try {
+            await updateDoc(doc(db, "images", image.id), {
+                category,
+                caption,
+                featured,
+                updatedAt: serverTimestamp(),
+            });
+            onClose();
+        } catch (e) {
+            console.error(e);
+            setErr("Couldn't save. Try again.");
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    return (
+        <div
+            className="fixed inset-0 z-50 bg-black/50 grid place-items-center p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+        >
+            <div className="bg-white rounded-2xl shadow-soft w-full max-w-md p-5 space-y-4">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                    <h3 className="font-semibold">Edit Image</h3>
+                    <button
+                        onClick={onClose}
+                        className="w-8 h-8 grid place-items-center rounded-full hover:bg-neutral-100"
+                        aria-label="Close"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                            <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        </svg>
+                    </button>
+                </div>
+
+                {/* Preview */}
+                <div className="aspect-[4/3] bg-neutral-100 rounded-xl overflow-hidden">
+                    <img
+                        src={image.url}
+                        alt={image.caption || ""}
+                        className="w-full h-full object-contain p-1"
+                    />
+                </div>
+
+                {/* Category */}
+                <div>
+                    <label className="block text-sm font-medium mb-1">Category</label>
+                    <select
+                        className="border rounded-lg px-3 py-2 w-full"
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                    >
+                        <option value="general">General</option>
+                        <option value="nails">Nails</option>
+                        <option value="designs">Designs</option>
+                    </select>
+                </div>
+
+                {/* Caption */}
+                <div>
+                    <label className="block text-sm font-medium mb-1">
+                        Caption <span className="text-neutral-400 font-normal">(optional)</span>
+                    </label>
+                    <input
+                        className="border rounded-lg px-3 py-2 w-full"
+                        placeholder="e.g. Swarovski full set"
+                        value={caption}
+                        onChange={(e) => setCaption(e.target.value)}
+                    />
+                </div>
+
+                {/* Featured */}
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                    <input
+                        type="checkbox"
+                        checked={featured}
+                        onChange={(e) => setFeatured(e.target.checked)}
+                        className="w-4 h-4"
+                    />
+                    <div>
+                        <span className="text-sm font-medium">Featured</span>
+                        <p className="text-xs text-neutral-500">Shown first in the home gallery</p>
+                    </div>
+                </label>
+
+                {err && <p className="text-sm text-red-600">{err}</p>}
+
+                {/* Actions */}
+                <div className="flex justify-end gap-2 pt-1">
+                    <button className="btn btn-ghost" onClick={onClose} disabled={saving}>
+                        Cancel
+                    </button>
+                    <button className="btn btn-primary" onClick={save} disabled={saving}>
+                        {saving ? "Saving…" : "Save"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 /* ===================== Signature Looks Editor ===================== */
 

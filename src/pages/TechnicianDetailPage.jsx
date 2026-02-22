@@ -59,12 +59,12 @@ export default function TechnicianDetailPage() {
                                     onClick={() => setActiveIndex(i)}
                                     className="group block rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition overflow-hidden"
                                 >
-                                    <div className="aspect-[4/3] bg-transparent">
+                                    <div className="aspect-[4/3] bg-neutral-100">
                                         <img
                                             src={src}
                                             alt={`${tech.name} ${i + 1}`}
                                             loading="lazy"
-                                            className="w-full h-full object-contain p-1 transition-transform duration-300 group-hover:scale-[1.02]"
+                                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                                         />
                                     </div>
                                 </button>

@@ -46,7 +46,7 @@ export default function TechniciansPage() {
                                             loading="lazy"
                                             decoding="async"
                                             sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
-                                            className="absolute inset-0 w-full h-full object-contain"
+                                            className="absolute inset-0 w-full h-full object-cover"
                                         />
                                         <div className="pointer-events-none absolute inset-0 ring-1 ring-inset ring-black/5" />
                                     </div>

@@ -1,0 +1,116 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Helper functions
+    // ─────────────────────────────────────────────────────────────────────
+
+    // User is signed in via Firebase Auth
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    // User has the custom claim  { admin: true }
+    // Set this once per admin account — see instructions below.
+    function isAdmin() {
+      return isAuthed() && request.auth.token.admin == true;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // images  (gallery photos)
+    // Public: read-only
+    // Admin:  full CRUD
+    // ─────────────────────────────────────────────────────────────────────
+    match /images/{docId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // technicians
+    // Public: read-only
+    // Admin:  full CRUD
+    // ─────────────────────────────────────────────────────────────────────
+    match /technicians/{docId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // signatureLooks  (Signature Looks cards on the home/services pages)
+    // Public: read-only
+    // Admin:  full CRUD
+    // ─────────────────────────────────────────────────────────────────────
+    match /signatureLooks/{docId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // site/settings  (single-document config — hero copy, phone, etc.)
+    // Public: read-only  (the client reads it to build the UI)
+    // Admin:  write
+    // ─────────────────────────────────────────────────────────────────────
+    match /site/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // contactMessages
+    // Public:  create only, with field validation
+    // Admin:   read + delete (no public update/delete)
+    // ─────────────────────────────────────────────────────────────────────
+    match /contactMessages/{docId} {
+      allow read, delete: if isAdmin();
+      allow update: if false; // messages are immutable once submitted
+
+      allow create: if
+        // ── Required fields must be present ───────────────────────────
+        request.resource.data.keys().hasAll(['name', 'message', 'createdAt', 'source']) &&
+
+        // ── No extra fields beyond the known set ──────────────────────
+        // (prevents arbitrary data injection)
+        request.resource.data.keys().hasOnly(
+          ['name', 'email', 'phone', 'message', 'tech', 'source', 'createdAt']
+        ) &&
+
+        // ── name: required string, 1–200 chars ────────────────────────
+        request.resource.data.name is string &&
+        request.resource.data.name.size() >= 1 &&
+        request.resource.data.name.size() <= 200 &&
+
+        // ── message: required string, 5–2000 chars ────────────────────
+        request.resource.data.message is string &&
+        request.resource.data.message.size() >= 5 &&
+        request.resource.data.message.size() <= 2000 &&
+
+        // ── email: optional, string ≤ 200 chars ───────────────────────
+        (!('email' in request.resource.data) ||
+          (request.resource.data.email is string &&
+           request.resource.data.email.size() <= 200)) &&
+
+        // ── phone: optional, string ≤ 30 chars ────────────────────────
+        (!('phone' in request.resource.data) ||
+          (request.resource.data.phone is string &&
+           request.resource.data.phone.size() <= 30)) &&
+
+        // ── tech: optional (URL param pre-fill), string ≤ 100 chars ──
+        (!('tech' in request.resource.data) ||
+          (request.resource.data.tech is string &&
+           request.resource.data.tech.size() <= 100)) &&
+
+        // ── source must be the literal string "website" ───────────────
+        request.resource.data.source == 'website';
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Deny everything else (including any undeclared collections)
+    // ─────────────────────────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

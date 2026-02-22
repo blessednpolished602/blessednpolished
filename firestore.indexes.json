@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "signatureLooks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "order", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

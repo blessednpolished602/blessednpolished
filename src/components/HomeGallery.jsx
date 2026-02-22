@@ -30,12 +30,12 @@ export default function HomeGallery() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 md:gap-4">
                     {items.map((img) => (
                         <div key={img.id} className="group overflow-hidden rounded-2xl">
-                            <div className="aspect-[4/3] bg-transparent">
+                            <div className="aspect-[4/3] bg-neutral-100">
                                 <img
                                     src={img.url}
                                     alt=""
                                     loading="lazy"
-                                    className="w-full h-full object-contain p-1 transition-transform duration-300 group-hover:scale-[1.02]"
+                                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
                                 />
                             </div>
                         </div>
