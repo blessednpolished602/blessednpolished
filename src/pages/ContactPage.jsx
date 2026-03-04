@@ -161,8 +161,9 @@ export default function ContactPage() {
 
                             <div className="grid sm:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm mb-1">Name</label>
+                                    <label htmlFor="contact-name" className="block text-sm mb-1">Name</label>
                                     <input
+                                        id="contact-name"
                                         className="w-full border rounded-lg px-3 py-2"
                                         value={form.name}
                                         onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -171,8 +172,9 @@ export default function ContactPage() {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm mb-1">Phone</label>
+                                    <label htmlFor="contact-phone" className="block text-sm mb-1">Phone</label>
                                     <input
+                                        id="contact-phone"
                                         className="w-full border rounded-lg px-3 py-2"
                                         value={form.phone}
                                         onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
@@ -183,8 +185,9 @@ export default function ContactPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm mb-1">Email</label>
+                                <label htmlFor="contact-email" className="block text-sm mb-1">Email</label>
                                 <input
+                                    id="contact-email"
                                     className="w-full border rounded-lg px-3 py-2"
                                     value={form.email}
                                     onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
@@ -197,21 +200,20 @@ export default function ContactPage() {
 
                             {/* NEW: Preferred technician (prefilled from ?tech=) */}
                             <div>
-                                <label className="block text-sm mb-1">Preferred technician</label>
+                                <label htmlFor="contact-tech" className="block text-sm mb-1">Preferred technician</label>
                                 <input
+                                    id="contact-tech"
                                     className="w-full border rounded-lg px-3 py-2"
                                     value={form.tech}
                                     onChange={(e) => setForm((f) => ({ ...f, tech: e.target.value }))}
                                     placeholder="Optional (e.g., Elysia)"
                                 />
-                                {/* If you prefer hidden only, keep this instead:
-                <input type="hidden" name="tech" value={form.tech} />
-                */}
                             </div>
 
                             <div>
-                                <label className="block text-sm mb-1">Message</label>
+                                <label htmlFor="contact-message" className="block text-sm mb-1">Message</label>
                                 <textarea
+                                    id="contact-message"
                                     className="w-full border rounded-lg px-3 py-2 min-h-[120px]"
                                     value={form.message}
                                     onChange={(e) => setForm((f) => ({ ...f, message: e.target.value }))}
