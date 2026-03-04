@@ -4,8 +4,8 @@ import { useParams, Link } from "react-router-dom";
 import { db } from "../lib/firebase";
 import { collection, doc, getDocs, getDoc, orderBy, query } from "firebase/firestore";
 
-// Base Square booking URL — everything after this is the staff selector or /start
-const SQUARE_BASE = "https://app.squareup.com/appointments/book/hiowoby9ly2y2x/LX68WJMN6NYDA";
+// Base Square booking URL — set VITE_SQUARE_BOOKING_URL in .env.local
+const SQUARE_BASE = import.meta.env.VITE_SQUARE_BOOKING_URL || "https://app.squareup.com/appointments/book/hiowoby9ly2y2x/LX68WJMN6NYDA";
 
 const POLICIES = [
     "Please arrive 5–10 minutes early.",
@@ -189,6 +189,7 @@ export default function BookingPage() {
                                 className="absolute inset-0 h-full w-full border-0"
                                 onLoad={() => setIframeLoaded(true)}
                                 loading="lazy"
+                                allow="payment; fullscreen"
                                 referrerPolicy="no-referrer-when-downgrade"
                             />
                         </div>
