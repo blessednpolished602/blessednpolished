@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import FocusTrap from "focus-trap-react";
 
 export default function Lightbox({ images, index = 0, onClose }) {
     const [i, setI] = useState(index);
@@ -6,12 +7,22 @@ export default function Lightbox({ images, index = 0, onClose }) {
     const [drag, setDrag] = useState({ x: 0, y: 0 });
     const [ms, setMs] = useState(0);
     const [animating, setAnimating] = useState(false);
+    const closeBtnRef = useRef(null);
+    const returnFocusRef = useRef(null);
 
     const THRESH_X = 60;
     const THRESH_Y = 70;
     const EASE = "cubic-bezier(.22,.61,.36,1)";
     const getUrl = (x) => (typeof x === "string" ? x : x?.url || x?.src || "");
     const getAlt = (x) => (typeof x === "string" ? "" : x?.alt || x?.caption || "Nail art by Blessed N Polished");
+
+    // Capture trigger element so we can restore focus when modal closes
+    useEffect(() => {
+        returnFocusRef.current = document.activeElement;
+        return () => {
+            returnFocusRef.current?.focus();
+        };
+    }, []);
 
     useEffect(() => {
         const onKey = (e) => {
@@ -98,55 +109,64 @@ export default function Lightbox({ images, index = 0, onClose }) {
     }
 
     return (
-        <div
-            role="dialog"
-            aria-modal="true"
-            className="fixed inset-0 z-[11000] bg-black/70 backdrop-blur-sm flex items-center justify-center"
-            style={{ touchAction: "none" }}
-            onTouchStart={onStart}
-            onTouchMove={onMove}
-            onTouchEnd={onEnd}
-            onMouseDown={onStart}
-            onMouseMove={(e) => { if (e.buttons === 1) onMove(e); }}
-            onMouseUp={onEnd}
+        <FocusTrap
+            focusTrapOptions={{
+                initialFocus: () => closeBtnRef.current,
+                escapeDeactivates: false, // ESC is handled by keydown listener above
+                allowOutsideClick: true,
+            }}
         >
-            <button
-                className="absolute top-3 right-3 w-10 h-10 grid place-items-center rounded-full bg-black/70 hover:bg-black text-white"
-                onClick={onClose}
-                aria-label="Close"
+            <div
+                role="dialog"
+                aria-modal="true"
+                className="fixed inset-0 z-[11000] bg-black/70 backdrop-blur-sm flex items-center justify-center"
+                style={{ touchAction: "none" }}
+                onTouchStart={onStart}
+                onTouchMove={onMove}
+                onTouchEnd={onEnd}
+                onMouseDown={onStart}
+                onMouseMove={(e) => { if (e.buttons === 1) onMove(e); }}
+                onMouseUp={onEnd}
             >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-            </button>
+                <button
+                    ref={closeBtnRef}
+                    className="absolute top-3 right-3 w-10 h-10 grid place-items-center rounded-full bg-black/70 hover:bg-black text-white"
+                    onClick={onClose}
+                    aria-label="Close"
+                >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M6 6l12 12M18 6l-12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                </button>
 
-            <button
-                className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 w-10 h-10 md:w-12 md:h-12 grid place-items-center rounded-full bg-black/60 hover:bg-black text-white select-none"
-                onClick={() => slide(-1)}
-                aria-label="Previous"
-            >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-            </button>
+                <button
+                    className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 w-10 h-10 md:w-12 md:h-12 grid place-items-center rounded-full bg-black/60 hover:bg-black text-white select-none"
+                    onClick={() => slide(-1)}
+                    aria-label="Previous"
+                >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                </button>
 
-            <img
-                src={getUrl(images[i])}
-                alt={getAlt(images[i])}
-                className="max-w-[92vw] max-h-[86vh] object-contain rounded-xl shadow-2xl select-none"
-                draggable={false}
-                style={{ transform: `translateX(${drag.x}px)`, transition: `transform ${ms}ms ${EASE}` }}
-            />
+                <img
+                    src={getUrl(images[i])}
+                    alt={getAlt(images[i])}
+                    className="max-w-[92vw] max-h-[86vh] object-contain rounded-xl shadow-2xl select-none"
+                    draggable={false}
+                    style={{ transform: `translateX(${drag.x}px)`, transition: `transform ${ms}ms ${EASE}` }}
+                />
 
-            <button
-                className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 w-10 h-10 md:w-12 md:h-12 grid place-items-center rounded-full bg-black/60 hover:bg-black text-white select-none"
-                onClick={() => slide(+1)}
-                aria-label="Next"
-            >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-            </button>
-        </div>
+                <button
+                    className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 w-10 h-10 md:w-12 md:h-12 grid place-items-center rounded-full bg-black/60 hover:bg-black text-white select-none"
+                    onClick={() => slide(+1)}
+                    aria-label="Next"
+                >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                </button>
+            </div>
+        </FocusTrap>
     );
 }
