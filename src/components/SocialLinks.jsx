@@ -1,7 +1,7 @@
 // src/components/SocialLinks.jsx
 import React from "react";
 import { Link } from "react-router-dom";
-import { FaFacebookF, FaInstagram, FaEnvelope } from "react-icons/fa";
+import { FaFacebookF, FaInstagram, FaEnvelope, FaGlobe } from "react-icons/fa";
 import { SiTiktok } from "react-icons/si";
 
 /**

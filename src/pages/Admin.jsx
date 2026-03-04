@@ -1058,7 +1058,7 @@ function TechEditorCard({ tech }) {
         if (!galleryFile) return;
         setAddingImg(true);
         try {
-            const ext = galleryFile.name.split(".").pop();
+            const _ext = galleryFile.name.split(".").pop();
             const p = `portfolios/${tech.id}/${Date.now()}_${galleryFile.name}`;
             const r = ref(storage, p);
             const task = uploadBytesResumable(r, galleryFile);
