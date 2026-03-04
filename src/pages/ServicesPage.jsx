@@ -30,7 +30,8 @@ export default function ServicesPage() {
                     {PRICING.map(({ service, price }) => (
                         <div
                             key={service}
-                            className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-3 shadow-soft"
+                            className="flex items-center justify-between rounded-xl ring-1 ring-black/5 shadow-soft px-4 py-3"
+                            style={{ background: "linear-gradient(to bottom, #f9d6d1 0%, #ffffff 100%)" }}
                         >
                             <span className="text-sm font-medium">{service}</span>
                             <span className="text-sm text-neutral-500 ml-3 shrink-0">{price}</span>
