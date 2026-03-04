@@ -107,6 +107,48 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // availability  (admin-managed open slots per tech per date)
+    // Public:  read (booking UI needs to show open dates/slots)
+    // Admin:   full CRUD
+    // Cloud Functions write via admin SDK (bypasses these rules)
+    // ─────────────────────────────────────────────────────────────────────
+    match /availability/{docId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // blockedDays  (full-day blocks per tech or shop-wide)
+    // Public:  read (booking UI needs to grey-out blocked dates)
+    // Admin:   full CRUD
+    // ─────────────────────────────────────────────────────────────────────
+    match /blockedDays/{docId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // slotLocks  (concurrency mutex — one doc per 30-min slot unit per booking)
+    // Public:  read (booking UI reads locks to subtract taken slots in Step 4)
+    // Write:   NONE from client — only Cloud Functions (admin SDK) create/delete
+    // ─────────────────────────────────────────────────────────────────────
+    match /slotLocks/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // bookings  (confirmed booking records)
+    // Public:  NONE — bookings are created by Cloud Function only
+    // Admin:   read + update + delete (for management UI and cancellation)
+    // Write:   Cloud Functions (admin SDK) create; admin can update/delete
+    // ─────────────────────────────────────────────────────────────────────
+    match /bookings/{docId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if false;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // Deny everything else (including any undeclared collections)
     // ─────────────────────────────────────────────────────────────────────
     match /{document=**} {
