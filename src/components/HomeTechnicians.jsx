@@ -5,6 +5,7 @@ import { db } from "../lib/firebase";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
 import SocialLinks from "./SocialLinks";
 import Skeleton from "./Skeleton";
+import { trackEvent } from "../lib/analytics";
 
 function TechSkeleton() {
     return (
@@ -106,11 +107,19 @@ export default function HomeTechnicians({ showViewAll }) {
                                         </div>
 
                                         <div className="mt-4 flex gap-3">
-                                            <Link to={`/technicians/${t.id}`} className="underline text-sm">
+                                            <Link
+                                                to={`/technicians/${t.id}`}
+                                                className="underline text-sm"
+                                                onClick={() => trackEvent("technician_card_click", { tech_name: t.name, action: "view_profile" })}
+                                            >
                                                 View profile
                                             </Link>
                                             {t.squareStaffId && (
-                                                <Link to={`/book/${t.id}`} className="underline text-sm">
+                                                <Link
+                                                    to={`/book/${t.id}`}
+                                                    className="underline text-sm"
+                                                    onClick={() => trackEvent("technician_card_click", { tech_name: t.name, action: "book" })}
+                                                >
                                                     Book {t.name.split(" ")[0]}
                                                 </Link>
                                             )}

@@ -27,6 +27,16 @@
     <!-- ─── Favicon ──────────────────────────────────────────────── -->
     <link rel="icon" type="image/png" href="/nailsicon.png" />
 
+    <!-- ─── Google Analytics 4 ─────────────────────────────────────── -->
+    <!-- Set VITE_GA_MEASUREMENT_ID=G-XXXXXXXXXX in .env.local          -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=%VITE_GA_MEASUREMENT_ID%"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', '%VITE_GA_MEASUREMENT_ID%');
+    </script>
+
     <!-- ─── Google Fonts ─────────────────────────────────────────── -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

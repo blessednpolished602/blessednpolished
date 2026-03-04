@@ -6,6 +6,7 @@ import { db } from "../lib/firebase";
 import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import useSiteSettings from "../hooks/useSiteSettings";
 import emailjs from "@emailjs/browser";
+import { trackEvent } from "../lib/analytics";
 
 export default function ContactPage() {
     const s = useSiteSettings();
@@ -81,6 +82,7 @@ export default function ContactPage() {
             );
 
             setSent(true);
+            trackEvent("contact_form_submit");
             // reset but keep defaultTech if they want to send another with same choice
             setForm({ name: "", email: "", phone: "", message: "", tech: defaultTech });
         } catch (e) {

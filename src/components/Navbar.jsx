@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { auth } from "../lib/firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import SocialLinks from "./SocialLinks"
+import SocialLinks from "./SocialLinks";
+import { trackEvent } from "../lib/analytics";
 
 export default function Navbar() {
     const navigate = useNavigate();
@@ -67,7 +68,11 @@ export default function Navbar() {
 
                     {/* Right: CTA + burger */}
                     <div className="flex items-center gap-2">
-                        <Link to="/book" className="hidden sm:inline-flex btn btn-primary sm:ml-6">
+                        <Link
+                            to="/book"
+                            className="hidden sm:inline-flex btn btn-primary sm:ml-6"
+                            onClick={() => trackEvent("book_now_click", { location: "navbar_desktop" })}
+                        >
                             Book Now
                         </Link>
                         <button
@@ -196,7 +201,7 @@ export default function Navbar() {
 
                                             <Link
                                                 to="/book"
-                                                onClick={() => setOpen(false)}
+                                                onClick={() => { setOpen(false); trackEvent("book_now_click", { location: "navbar_mobile" }); }}
                                                 className="mt-2 btn btn-primary w-full justify-center"
                                             >
                                                 Book Now
