@@ -42,7 +42,7 @@ export default function Hero({ onBook }) {
                             {s?.heroImage ? (
                                 <img
                                     src={s.heroImage}
-                                    alt=""
+                                    alt={s.heroImageAlt || "Nail art at Blessed N Polished"}
                                     className="absolute inset-0 h-full w-full object-cover object-center"
                                     width={1200}
                                     height={1600}

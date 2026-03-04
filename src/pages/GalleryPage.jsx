@@ -86,7 +86,7 @@ export default function GalleryPage() {
                                 <div className="aspect-[4/3] bg-transparent">
                                     <img
                                         src={img.url}
-                                        alt=""
+                                        alt={img.alt || img.caption || "Nail art by Blessed N Polished"}
                                         loading="lazy"
                                         className="w-full h-full object-contain"
                                     />

@@ -11,6 +11,7 @@ export default function Lightbox({ images, index = 0, onClose }) {
     const THRESH_Y = 70;
     const EASE = "cubic-bezier(.22,.61,.36,1)";
     const getUrl = (x) => (typeof x === "string" ? x : x?.url || x?.src || "");
+    const getAlt = (x) => (typeof x === "string" ? "" : x?.alt || x?.caption || "Nail art by Blessed N Polished");
 
     useEffect(() => {
         const onKey = (e) => {
@@ -131,7 +132,7 @@ export default function Lightbox({ images, index = 0, onClose }) {
 
             <img
                 src={getUrl(images[i])}
-                alt=""
+                alt={getAlt(images[i])}
                 className="max-w-[92vw] max-h-[86vh] object-contain rounded-xl shadow-2xl select-none"
                 draggable={false}
                 style={{ transform: `translateX(${drag.x}px)`, transition: `transform ${ms}ms ${EASE}` }}

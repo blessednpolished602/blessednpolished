@@ -70,7 +70,7 @@ export default function HomeServices({ showViewAll }) {
                                 <div className="relative aspect-[16/9] sm:aspect-[4/3]">
                                     <img
                                         src={s.imgUrl}
-                                        alt={s.alt || ""}
+                                        alt={s.alt || s.title || "Signature nail look"}
                                         loading="lazy"
                                         className="absolute inset-0 h-full w-full object-contain"
                                     />
