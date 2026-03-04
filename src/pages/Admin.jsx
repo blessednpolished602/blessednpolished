@@ -33,6 +33,7 @@ import {
 } from "firebase/storage";
 
 import useSiteSettings from "../hooks/useSiteSettings";
+import AdminCalendarView from "../components/admin/AdminCalendarView";
 import MediaLibraryModal from "../components/MediaLibraryModal";
 import Footer from "../components/Footer";
 import { arrayUnion, arrayRemove } from "firebase/firestore";
@@ -131,6 +132,7 @@ export default function Admin() {
 
                 <HeroEditor />
                 <BusinessHoursEditor />
+                <AdminCalendarView />
                 <ScheduleTab />
                 <BookingsTab />
                 <SignatureLooksEditor />
