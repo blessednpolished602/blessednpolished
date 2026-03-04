@@ -62,6 +62,20 @@ function canBookNow() {
   } catch { return true; }
 }
 
+/**
+ * Return { startMin, endMin } for the weekday of dateStr, or null if closed.
+ * Uses hours.byDay[dow] if present, falls back to hours.default.
+ */
+const DOW_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+function getHoursForDate(hours, dateStr) {
+  if (!hours) return null;
+  const [y, mo, d] = dateStr.split("-").map(Number);
+  const dow = DOW_KEYS[new Date(y, mo - 1, d).getDay()];
+  const override = hours.byDay?.[dow];
+  if (override === null) return null;           // explicitly closed
+  return override ?? hours.default ?? null;     // custom | default | unset
+}
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function BookingPage() {
@@ -78,6 +92,14 @@ export default function BookingPage() {
   const [submitting,    setSubmitting]    = useState(false);
   const [error,         setError]         = useState(null);
   const [bookingResult, setBookingResult] = useState(null);
+  const [siteSettings,  setSiteSettings]  = useState(null);
+
+  // ── Fetch site settings (hours, timezone, etc.) ─────────────────────────────
+  useEffect(() => {
+    getDoc(doc(db, "site", "settings"))
+      .then(d => { if (d.exists()) setSiteSettings(d.data()); })
+      .catch(() => {});
+  }, []);
 
   // ── Step 1: Services ────────────────────────────────────────────────────────
   const [services, setServices] = useState(null);
@@ -143,6 +165,9 @@ export default function BookingPage() {
     if (ds < todayStr() || !availMap || !blockedSet) return false;
     if (blockedSet.has(`all_${ds}`)) return false;
 
+    // Disable days marked closed in business hours
+    if (siteSettings?.hours && getHoursForDate(siteSettings.hours, ds) === null) return false;
+
     const dur = service?.durationMin || 60;
 
     if (tech?.id !== "any") {
@@ -182,10 +207,17 @@ export default function BookingPage() {
         const docs = snap.docs
           .map(d => d.data())
           .filter(d => tech?.id === "any" || d.techId === tech?.id);
-        setTimeSlots(getValidStarts(docs, service?.durationMin || 60));
+        const dur = service?.durationMin || 60;
+        let starts = getValidStarts(docs, dur);
+        // Filter to within business hours for that weekday
+        if (siteSettings?.hours && date) {
+          const h = getHoursForDate(siteSettings.hours, date);
+          if (h) starts = starts.filter(m => m >= h.startMin && m + dur <= h.endMin);
+        }
+        setTimeSlots(starts);
       })
       .catch(() => setTimeSlots([]));
-  }, [step, date, tech, service]);
+  }, [step, date, tech, service, siteSettings]);
 
   // ── Submit ──────────────────────────────────────────────────────────────────
   async function handleSubmit(e) {

@@ -12,6 +12,7 @@ import {
 import {
     addDoc,
     collection,
+    getDocs,
     serverTimestamp,
     onSnapshot,
     orderBy,
@@ -20,6 +21,7 @@ import {
     doc,
     setDoc,
     updateDoc,
+    where,
 } from "firebase/firestore";
 
 import {
@@ -33,6 +35,49 @@ import useSiteSettings from "../hooks/useSiteSettings";
 import MediaLibraryModal from "../components/MediaLibraryModal";
 import Footer from "../components/Footer";
 import { arrayUnion, arrayRemove } from "firebase/firestore";
+import { minToTimeString } from "../lib/timeUtils";
+
+// ── Hours helpers (shared by BusinessHoursEditor + ScheduleTab) ───────────────
+const DAYS      = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+const DAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const SLOT_MIN  = 30;
+
+/** "HH:MM" from minutes — for <input type="time"> */
+function minToTimeInput(min) {
+    return String(Math.floor(min / 60)).padStart(2, "0") + ":" + String(min % 60).padStart(2, "0");
+}
+
+/** minutes from "HH:MM" string */
+function timeInputToMin(s) {
+    const [h, m] = s.split(":").map(Number);
+    return h * 60 + (m || 0);
+}
+
+/**
+ * Get hours for a YYYY-MM-DD date string from site/settings hours object.
+ * Returns null if closed, or { startMin, endMin }.
+ */
+function hoursForDay(hours, dateStr) {
+    if (!hours) return null;
+    const [y, mo, d] = dateStr.split("-").map(Number);
+    const dow = DAYS[new Date(y, mo - 1, d).getDay()];
+    const override = hours.byDay?.[dow];
+    if (override === null) return null;          // explicitly closed
+    return override ?? hours.default ?? null;    // custom | default | unset
+}
+
+/** All startMin values in [startMin, endMin) stepping by slotSize */
+function genSlots(startMin, endMin, slotSize = SLOT_MIN) {
+    const out = [];
+    for (let m = startMin; m < endMin; m += slotSize) out.push(m);
+    return out;
+}
+
+/** Today as "YYYY-MM-DD" (local time) */
+function adminTodayStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
 
 
@@ -84,6 +129,8 @@ export default function Admin() {
                 </header>
 
                 <HeroEditor />
+                <BusinessHoursEditor />
+                <ScheduleTab />
                 <SignatureLooksEditor />
                 <TechniciansManager />
                 <GalleryUploader />
@@ -1175,3 +1222,354 @@ function TechEditorCard({ tech }) {
     );
 }
 
+/* ===================== Business Hours Editor ===================== */
+
+function BusinessHoursEditor() {
+    const settings = useSiteSettings();
+    const slotSize = settings?.slotSizeMin ?? SLOT_MIN;
+
+    const [dflt, setDflt] = useState({ startMin: 480, endMin: 1200 });
+    const [byDay, setByDay] = useState(() =>
+        Object.fromEntries(DAYS.map(d => [d, { closed: false, startMin: 480, endMin: 1200 }]))
+    );
+    const [saving, setSaving] = useState(false);
+    const [err, setErr] = useState(null);
+    const [saved, setSaved] = useState(false);
+
+    useEffect(() => {
+        if (settings === undefined) return; // still loading
+        const h = settings?.hours;
+        if (!h) return;
+        if (h.default) setDflt(h.default);
+        const merged = {};
+        DAYS.forEach(d => {
+            const o = h.byDay?.[d];
+            if (o === null) {
+                merged[d] = { closed: true, startMin: h.default?.startMin ?? 480, endMin: h.default?.endMin ?? 1200 };
+            } else if (o) {
+                merged[d] = { closed: false, startMin: o.startMin, endMin: o.endMin };
+            } else {
+                merged[d] = { closed: false, startMin: h.default?.startMin ?? 480, endMin: h.default?.endMin ?? 1200 };
+            }
+        });
+        setByDay(merged);
+    }, [settings]);
+
+    function setDayField(day, field, value) {
+        setByDay(b => ({ ...b, [day]: { ...b[day], [field]: value } }));
+    }
+
+    function validate() {
+        if (dflt.endMin <= dflt.startMin) return "Default: close time must be after open time";
+        if (dflt.startMin % slotSize !== 0 || dflt.endMin % slotSize !== 0)
+            return `Default: times must be multiples of ${slotSize} min`;
+        for (const d of DAYS) {
+            const row = byDay[d];
+            if (row.closed) continue;
+            if (row.endMin <= row.startMin) return `${DAY_LABELS[DAYS.indexOf(d)]}: close must be after open`;
+            if (row.startMin % slotSize !== 0 || row.endMin % slotSize !== 0)
+                return `${DAY_LABELS[DAYS.indexOf(d)]}: times must be multiples of ${slotSize} min`;
+        }
+        return null;
+    }
+
+    async function save() {
+        const e = validate();
+        if (e) { setErr(e); return; }
+        setErr(null);
+        setSaving(true);
+        try {
+            const byDayData = {};
+            DAYS.forEach(d => {
+                const row = byDay[d];
+                byDayData[d] = row.closed ? null : { startMin: row.startMin, endMin: row.endMin };
+            });
+            await setDoc(doc(db, "site", "settings"), {
+                hours: { default: dflt, byDay: byDayData },
+                updatedAt: serverTimestamp(),
+            }, { merge: true });
+            setSaved(true);
+            setTimeout(() => setSaved(false), 3000);
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    return (
+        <section className="bg-white border rounded-2xl p-4 shadow-soft space-y-4">
+            <h2 className="font-semibold">Business Hours</h2>
+
+            {/* Default hours */}
+            <div>
+                <p className="text-xs text-neutral-500 mb-2">Default hours (applies to any day not overridden below)</p>
+                <div className="flex flex-wrap items-center gap-3 text-sm">
+                    <span className="w-24 font-medium">Default</span>
+                    <input
+                        type="time" step={slotSize * 60}
+                        value={minToTimeInput(dflt.startMin)}
+                        onChange={e => setDflt(d => ({ ...d, startMin: timeInputToMin(e.target.value) }))}
+                        className="border rounded-lg px-2 py-1"
+                    />
+                    <span className="text-neutral-400">to</span>
+                    <input
+                        type="time" step={slotSize * 60}
+                        value={minToTimeInput(dflt.endMin)}
+                        onChange={e => setDflt(d => ({ ...d, endMin: timeInputToMin(e.target.value) }))}
+                        className="border rounded-lg px-2 py-1"
+                    />
+                </div>
+            </div>
+
+            {/* Per-day overrides */}
+            <div className="space-y-2">
+                {DAYS.map((day, i) => {
+                    const row = byDay[day];
+                    return (
+                        <div key={day} className="flex flex-wrap items-center gap-3 text-sm">
+                            <span className="w-24">{DAY_LABELS[i]}</span>
+                            <label className="flex items-center gap-1 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={row.closed}
+                                    onChange={e => setDayField(day, "closed", e.target.checked)}
+                                />
+                                <span className="text-neutral-500">Closed</span>
+                            </label>
+                            {!row.closed && (
+                                <>
+                                    <input
+                                        type="time" step={slotSize * 60}
+                                        value={minToTimeInput(row.startMin)}
+                                        onChange={e => setDayField(day, "startMin", timeInputToMin(e.target.value))}
+                                        className="border rounded-lg px-2 py-1"
+                                    />
+                                    <span className="text-neutral-400">to</span>
+                                    <input
+                                        type="time" step={slotSize * 60}
+                                        value={minToTimeInput(row.endMin)}
+                                        onChange={e => setDayField(day, "endMin", timeInputToMin(e.target.value))}
+                                        className="border rounded-lg px-2 py-1"
+                                    />
+                                </>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {err && <p className="text-sm text-red-600">{err}</p>}
+            <div className="flex items-center gap-3">
+                <button className="btn btn-primary" onClick={save} disabled={saving}>
+                    {saving ? "Saving…" : "Save Hours"}
+                </button>
+                {saved && <span className="text-sm text-green-600">Saved!</span>}
+            </div>
+        </section>
+    );
+}
+
+/* ===================== Schedule Tab ===================== */
+
+function ScheduleTab() {
+    const settings = useSiteSettings();
+    const slotSize = settings?.slotSizeMin ?? SLOT_MIN;
+
+    const [selDate, setSelDate]   = useState(adminTodayStr());
+    const [techs,   setTechs]     = useState([]);
+    const [availMap, setAvailMap] = useState({});       // techId → availability data
+    const [blocked, setBlocked]   = useState(new Set()); // Set of blocked techIds (or "all")
+    const [locks,   setLocks]     = useState({});        // "techId_startMin" → bookingId
+    const [loading, setLoading]   = useState(false);
+    const [saving,  setSaving]    = useState(false);
+    const [saved,   setSaved]     = useState(false);
+
+    // Load active technicians once
+    useEffect(() => {
+        getDocs(query(collection(db, "technicians"), where("active", "==", true)))
+            .then(snap => setTechs(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    }, []);
+
+    // Reload availability, blocked days, and slot locks when date changes
+    useEffect(() => {
+        if (!selDate) return;
+        setLoading(true);
+        setAvailMap({});
+        setBlocked(new Set());
+        setLocks({});
+        Promise.all([
+            getDocs(query(collection(db, "availability"), where("date", "==", selDate))),
+            getDocs(query(collection(db, "blockedDays"),  where("date", "==", selDate))),
+            getDocs(query(collection(db, "slotLocks"),    where("date", "==", selDate))),
+        ]).then(([availSnap, blockSnap, lockSnap]) => {
+            const am = {};
+            availSnap.docs.forEach(d => { am[d.data().techId] = d.data(); });
+            setAvailMap(am);
+
+            const bs = new Set();
+            blockSnap.docs.forEach(d => bs.add(d.data().techId));
+            setBlocked(bs);
+
+            const lm = {};
+            lockSnap.docs.forEach(d => {
+                const { techId, startMin, bookingId } = d.data();
+                lm[`${techId}_${startMin}`] = bookingId;
+            });
+            setLocks(lm);
+        }).finally(() => setLoading(false));
+    }, [selDate]);
+
+    const hours    = selDate ? hoursForDay(settings?.hours, selDate) : undefined;
+    const isClosed = hours === null;
+    const daySlots = hours ? genSlots(hours.startMin, hours.endMin, slotSize) : [];
+
+    function toggleSlot(techId, slotMin) {
+        if (locks[`${techId}_${slotMin}`]) return; // booked — cannot toggle
+        setAvailMap(prev => {
+            const current = prev[techId]?.slots ?? [];
+            const has = current.includes(slotMin);
+            return {
+                ...prev,
+                [techId]: {
+                    ...(prev[techId] ?? {}),
+                    techId,
+                    slots: has
+                        ? current.filter(s => s !== slotMin)
+                        : [...current, slotMin].sort((a, b) => a - b),
+                },
+            };
+        });
+    }
+
+    async function saveDay() {
+        if (!selDate) return;
+        setSaving(true);
+        try {
+            await Promise.all(techs.map(tech => {
+                const slots = availMap[tech.id]?.slots ?? [];
+                if (slots.length > 0) {
+                    return setDoc(doc(db, "availability", `${tech.id}_${selDate}`), {
+                        techId:      tech.id,
+                        techName:    tech.name,
+                        date:        selDate,
+                        timezone:    "America/Phoenix",
+                        slotSizeMin: slotSize,
+                        slots,
+                        updatedAt:   serverTimestamp(),
+                    }, { merge: false });
+                } else {
+                    return deleteDoc(doc(db, "availability", `${tech.id}_${selDate}`)).catch(() => {});
+                }
+            }));
+            setSaved(true);
+            setTimeout(() => setSaved(false), 3000);
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    return (
+        <section className="bg-white border rounded-2xl p-4 shadow-soft space-y-4">
+            <h2 className="font-semibold">Schedule</h2>
+
+            <div className="flex flex-wrap items-center gap-3">
+                <input
+                    type="date"
+                    value={selDate}
+                    min={adminTodayStr()}
+                    onChange={e => setSelDate(e.target.value)}
+                    className="border rounded-lg px-3 py-2 text-sm"
+                />
+                {isClosed && (
+                    <span className="text-sm text-neutral-500 italic">Closed (per Business Hours)</span>
+                )}
+            </div>
+
+            {loading && <p className="text-sm text-neutral-400">Loading…</p>}
+
+            {!loading && selDate && !isClosed && hours && (
+                <>
+                    {techs.length === 0 ? (
+                        <p className="text-sm text-neutral-400">No active technicians.</p>
+                    ) : (
+                        <div className="overflow-x-auto">
+                            <table className="text-xs border-collapse">
+                                <thead>
+                                    <tr>
+                                        <th className="text-left px-2 py-1 font-medium text-sm min-w-[6rem]">Tech</th>
+                                        {daySlots.map(s => (
+                                            <th key={s} className="px-0.5 py-1 font-normal text-neutral-400 text-center whitespace-nowrap">
+                                                {minToTimeString(s)}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {techs.map(tech => {
+                                        const isBlocked = blocked.has("all") || blocked.has(tech.id);
+                                        const slots = availMap[tech.id]?.slots ?? [];
+                                        return (
+                                            <tr key={tech.id} className="border-t border-neutral-100">
+                                                <td className="px-2 py-1 font-medium whitespace-nowrap">{tech.name}</td>
+                                                {isBlocked ? (
+                                                    <td colSpan={daySlots.length} className="px-2 py-1 text-neutral-400 italic text-center">
+                                                        Day blocked
+                                                    </td>
+                                                ) : daySlots.map(s => {
+                                                    const isAvail  = slots.includes(s);
+                                                    const isLocked = !!locks[`${tech.id}_${s}`];
+                                                    return (
+                                                        <td key={s} className="px-0.5 py-0.5">
+                                                            <button
+                                                                onClick={() => toggleSlot(tech.id, s)}
+                                                                disabled={isLocked}
+                                                                title={
+                                                                    isLocked ? "Booked — cancel booking to free this slot"
+                                                                    : isAvail ? "Open — click to close"
+                                                                    : "Closed — click to open"
+                                                                }
+                                                                className={[
+                                                                    "w-10 h-7 rounded text-xs font-medium transition",
+                                                                    isLocked  ? "bg-red-100 text-red-600 cursor-not-allowed"
+                                                                    : isAvail ? "bg-green-100 text-green-700 hover:bg-green-200 cursor-pointer"
+                                                                    :           "bg-neutral-100 text-neutral-300 hover:bg-neutral-200 cursor-pointer",
+                                                                ].join(" ")}
+                                                            >
+                                                                {isLocked ? "🔒" : isAvail ? "✓" : ""}
+                                                            </button>
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center gap-4">
+                        <button className="btn btn-primary" onClick={saveDay} disabled={saving}>
+                            {saving ? "Saving…" : "Save Day"}
+                        </button>
+                        {saved && <span className="text-sm text-green-600">Saved!</span>}
+                        <div className="flex items-center gap-3 text-xs text-neutral-500">
+                            <span className="flex items-center gap-1.5">
+                                <span className="inline-block w-4 h-4 rounded bg-green-100" /> Available
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                                <span className="inline-block w-4 h-4 rounded bg-neutral-100" /> Closed
+                            </span>
+                            <span className="flex items-center gap-1.5">
+                                <span className="inline-block w-4 h-4 rounded bg-red-100" /> Booked
+                            </span>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {!loading && selDate && !isClosed && !hours && settings !== undefined && (
+                <p className="text-sm text-neutral-400">Set business hours above to enable the schedule grid.</p>
+            )}
+        </section>
+    );
+}
