@@ -38,6 +38,11 @@ export default function HomeTechnicians({ showViewAll }) {
                         .map((d) => ({ id: d.id, ...d.data() }))
                         .filter((x) => x.enabled !== false)
                 );
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                console.error("Failed to load technicians:", err);
+                setItems([]); // unblock skeleton on error
             });
         return () => { cancelled = true; };
     }, []);

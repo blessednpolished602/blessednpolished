@@ -14,6 +14,11 @@ export default function HomeGallery() {
             .then((snap) => {
                 if (cancelled) return;
                 setAll(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                console.error("Failed to load gallery:", err);
+                setAll([]); // unblock skeleton on error
             });
         return () => { cancelled = true; };
     }, []);
