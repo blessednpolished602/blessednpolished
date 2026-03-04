@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 
-import { auth, db, storage } from "../lib/firebase";
+import { auth, db, storage, functions } from "../lib/firebase";
+import { httpsCallable } from "firebase/functions";
 import {
     onAuthStateChanged,
     signInWithEmailAndPassword,
@@ -131,6 +132,7 @@ export default function Admin() {
                 <HeroEditor />
                 <BusinessHoursEditor />
                 <ScheduleTab />
+                <BookingsTab />
                 <SignatureLooksEditor />
                 <TechniciansManager />
                 <GalleryUploader />
@@ -1569,6 +1571,213 @@ function ScheduleTab() {
 
             {!loading && selDate && !isClosed && !hours && settings !== undefined && (
                 <p className="text-sm text-neutral-400">Set business hours above to enable the schedule grid.</p>
+            )}
+        </section>
+    );
+}
+
+/* ===================== Bookings Tab ===================== */
+
+const cancelBookingFn = httpsCallable(functions, "cancelBooking");
+
+function dateStrPlus(days) {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function BookingsTab() {
+    const [bookings,  setBookings]  = useState([]);
+    const [loading,   setLoading]   = useState(true);
+    const [techs,     setTechs]     = useState([]);
+    const [filterTech,   setFilterTech]   = useState("all");
+    const [filterStatus, setFilterStatus] = useState("confirmed");
+    const [search,    setSearch]    = useState("");
+    const [dateFrom,  setDateFrom]  = useState(adminTodayStr());
+    const [dateTo,    setDateTo]    = useState(dateStrPlus(30));
+    const [cancelling, setCancelling] = useState(null); // bookingId being cancelled
+
+    // Load technician list for filter dropdown
+    useEffect(() => {
+        getDocs(query(collection(db, "technicians"), orderBy("name", "asc")))
+            .then(snap => setTechs(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    }, []);
+
+    // Load bookings whenever filters change
+    useEffect(() => {
+        setLoading(true);
+        let q = query(
+            collection(db, "bookings"),
+            where("date", ">=", dateFrom),
+            where("date", "<=", dateTo),
+            orderBy("date", "asc"),
+            orderBy("startMin", "asc")
+        );
+        getDocs(q)
+            .then(snap => {
+                setBookings(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            })
+            .catch(err => {
+                console.error("Failed to load bookings:", err);
+                setBookings([]);
+            })
+            .finally(() => setLoading(false));
+    }, [dateFrom, dateTo]);
+
+    async function handleCancel(booking) {
+        if (!confirm(`Cancel booking for ${booking.name} on ${booking.date} at ${minToTimeString(booking.startMin)}?`)) return;
+        setCancelling(booking.id);
+        try {
+            await cancelBookingFn({ bookingId: booking.id });
+            // Refresh list
+            setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: "cancelled" } : b));
+        } catch (err) {
+            console.error("Cancel failed:", err);
+            alert("Failed to cancel: " + (err.message || "Unknown error"));
+        } finally {
+            setCancelling(null);
+        }
+    }
+
+    // Client-side filters: techId, status, search
+    const q = search.toLowerCase();
+    const visible = bookings.filter(b => {
+        if (filterTech !== "all" && b.techId !== filterTech) return false;
+        if (filterStatus !== "all" && b.status !== filterStatus) return false;
+        if (q) {
+            const hay = `${b.name} ${b.email || ""} ${b.phone || ""}`.toLowerCase();
+            if (!hay.includes(q)) return false;
+        }
+        return true;
+    });
+
+    return (
+        <section className="bg-white border rounded-2xl p-4 shadow-soft space-y-4">
+            <h2 className="font-semibold">Bookings</h2>
+
+            {/* Filters */}
+            <div className="flex flex-wrap items-end gap-3 text-sm">
+                <div className="flex flex-col gap-1">
+                    <label className="text-xs text-neutral-500">From</label>
+                    <input
+                        type="date"
+                        value={dateFrom}
+                        onChange={e => setDateFrom(e.target.value)}
+                        className="border rounded-lg px-3 py-2"
+                    />
+                </div>
+                <div className="flex flex-col gap-1">
+                    <label className="text-xs text-neutral-500">To</label>
+                    <input
+                        type="date"
+                        value={dateTo}
+                        onChange={e => setDateTo(e.target.value)}
+                        className="border rounded-lg px-3 py-2"
+                    />
+                </div>
+                <div className="flex flex-col gap-1">
+                    <label className="text-xs text-neutral-500">Technician</label>
+                    <select
+                        value={filterTech}
+                        onChange={e => setFilterTech(e.target.value)}
+                        className="border rounded-lg px-3 py-2"
+                    >
+                        <option value="all">All techs</option>
+                        {techs.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                    <label className="text-xs text-neutral-500">Status</label>
+                    <select
+                        value={filterStatus}
+                        onChange={e => setFilterStatus(e.target.value)}
+                        className="border rounded-lg px-3 py-2"
+                    >
+                        <option value="all">All</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div className="flex flex-col gap-1 flex-1 min-w-[12rem]">
+                    <label className="text-xs text-neutral-500">Search name / email / phone</label>
+                    <input
+                        type="text"
+                        placeholder="Search…"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        className="border rounded-lg px-3 py-2"
+                    />
+                </div>
+            </div>
+
+            {loading && <p className="text-sm text-neutral-400">Loading…</p>}
+
+            {!loading && visible.length === 0 && (
+                <p className="text-sm text-neutral-400">No bookings found.</p>
+            )}
+
+            {!loading && visible.length > 0 && (
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm border-collapse">
+                        <thead>
+                            <tr className="border-b border-neutral-100 text-left text-xs text-neutral-500">
+                                <th className="py-2 pr-4 font-medium">Date</th>
+                                <th className="py-2 pr-4 font-medium">Time</th>
+                                <th className="py-2 pr-4 font-medium">Tech</th>
+                                <th className="py-2 pr-4 font-medium">Service</th>
+                                <th className="py-2 pr-4 font-medium">Client</th>
+                                <th className="py-2 pr-4 font-medium">Contact</th>
+                                <th className="py-2 pr-4 font-medium">Notes</th>
+                                <th className="py-2 pr-4 font-medium">Status</th>
+                                <th className="py-2 font-medium" />
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {visible.map(b => (
+                                <tr key={b.id} className={[
+                                    "border-t border-neutral-100 align-top",
+                                    b.status === "cancelled" ? "opacity-50" : "",
+                                ].join(" ")}>
+                                    <td className="py-2 pr-4 whitespace-nowrap">{b.date}</td>
+                                    <td className="py-2 pr-4 whitespace-nowrap">
+                                        {minToTimeString(b.startMin)}
+                                        <span className="text-neutral-400 text-xs ml-1">({b.durationMin}m)</span>
+                                    </td>
+                                    <td className="py-2 pr-4 whitespace-nowrap">{b.techName || b.techId}</td>
+                                    <td className="py-2 pr-4">{b.serviceName}</td>
+                                    <td className="py-2 pr-4 whitespace-nowrap">{b.name}</td>
+                                    <td className="py-2 pr-4 text-xs whitespace-nowrap">
+                                        {b.email && <div>{b.email}</div>}
+                                        {b.phone && <div>{b.phone}</div>}
+                                    </td>
+                                    <td className="py-2 pr-4 text-xs max-w-[10rem] break-words">{b.notes || "—"}</td>
+                                    <td className="py-2 pr-4 whitespace-nowrap">
+                                        <span className={[
+                                            "inline-block px-2 py-0.5 rounded-full text-xs font-medium",
+                                            b.status === "confirmed"
+                                                ? "bg-green-100 text-green-700"
+                                                : "bg-neutral-100 text-neutral-500",
+                                        ].join(" ")}>
+                                            {b.status}
+                                        </span>
+                                    </td>
+                                    <td className="py-2">
+                                        {b.status === "confirmed" && (
+                                            <button
+                                                className="btn btn-ghost text-xs text-red-600 hover:bg-red-50"
+                                                onClick={() => handleCancel(b)}
+                                                disabled={cancelling === b.id}
+                                            >
+                                                {cancelling === b.id ? "Cancelling…" : "Cancel"}
+                                            </button>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    <p className="text-xs text-neutral-400 mt-2">{visible.length} booking{visible.length !== 1 ? "s" : ""}</p>
+                </div>
             )}
         </section>
     );
