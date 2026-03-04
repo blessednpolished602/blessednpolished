@@ -1,4 +1,5 @@
 // src/pages/ContactPage.jsx
+import { Helmet } from "react-helmet-async";
 import { useState, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { db } from "../lib/firebase";
@@ -92,6 +93,10 @@ export default function ContactPage() {
 
     return (
         <section className="mx-auto max-w-6xl px-4 py-10 md:py-16">
+            <Helmet>
+                <title>Contact | Blessed N Polished</title>
+                <meta name="description" content="Get in touch with Blessed N Polished in Buckeye, AZ. By appointment only — contact us for availability, custom quotes, or to book your next look." />
+            </Helmet>
             <h1 className="text-3xl md:text-4xl font-bold mb-8">Contact</h1>
 
             <div className="grid md:grid-cols-2 gap-8">

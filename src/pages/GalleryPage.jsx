@@ -1,3 +1,4 @@
+import { Helmet } from "react-helmet-async";
 import { useCallback, useEffect, useState } from "react";
 import { db } from "../lib/firebase";
 import {
@@ -59,6 +60,10 @@ export default function GalleryPage() {
 
     return (
         <section className="mx-auto max-w-6xl px-4 py-10">
+            <Helmet>
+                <title>Gallery | Blessed N Polished</title>
+                <meta name="description" content="Browse our portfolio of custom nail art, Swarovski crystal sets, XXL designs, and more by Buckeye's top nail technicians." />
+            </Helmet>
             <h1 className="text-3xl font-bold mb-6">Gallery</h1>
 
             {loading ? (

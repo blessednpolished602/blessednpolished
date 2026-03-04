@@ -1,3 +1,4 @@
+import { Helmet } from "react-helmet-async";
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { db } from "../lib/firebase";
@@ -69,6 +70,10 @@ export default function BookingPage() {
 
     return (
         <main className="min-h-screen text-gray-900">
+            <Helmet>
+                <title>{techId && tech ? `Book with ${tech.name} | Blessed N Polished` : "Book an Appointment | Blessed N Polished"}</title>
+                <meta name="description" content={techId && tech ? `Book a nail appointment with ${tech.name} at Blessed N Polished in Buckeye, AZ.` : "Schedule your nail appointment online at Blessed N Polished in Buckeye, AZ. Custom designs, Swarovski sets, XXL nail art, and more."} />
+            </Helmet>
             <section className="mx-auto max-w-5xl px-4 py-10">
                 <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
                     {techId && tech

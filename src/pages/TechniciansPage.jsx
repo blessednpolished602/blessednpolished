@@ -1,3 +1,4 @@
+import { Helmet } from "react-helmet-async";
 import { useEffect, useState } from "react";
 import { db } from "../lib/firebase";
 import { collection, getDocs, orderBy, query } from "firebase/firestore";
@@ -41,6 +42,10 @@ export default function TechniciansPage() {
 
     return (
         <main className="min-h-screen mx-auto max-w-6xl px-4 py-12">
+            <Helmet>
+                <title>Our Technicians | Blessed N Polished</title>
+                <meta name="description" content="Meet the Blessed N Polished team — skilled nail technicians specializing in custom art, Swarovski sets, and luxury nail designs in Buckeye, AZ." />
+            </Helmet>
             <h1 className="text-3xl md:text-4xl font-extrabold mb-8">Technicians</h1>
 
             {techs === null ? (

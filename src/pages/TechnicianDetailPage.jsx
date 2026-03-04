@@ -1,4 +1,5 @@
 // src/pages/TechnicianDetailPage.jsx
+import { Helmet } from "react-helmet-async";
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { db } from "../lib/firebase";
@@ -30,6 +31,10 @@ export default function TechnicianDetailPage() {
 
     return (
         <main className="min-h-screen">
+            <Helmet>
+                <title>{tech.name} | Blessed N Polished</title>
+                <meta name="description" content={tech.bio || `Book a custom nail appointment with ${tech.name} at Blessed N Polished in Buckeye, AZ.`} />
+            </Helmet>
             <section className="mx-auto max-w-6xl px-4 py-10">
                 <div className="flex flex-col md:flex-row items-start gap-6">
                     {tech.avatarUrl && <img src={tech.avatarUrl} alt={tech.name} className="h-28 w-28 rounded-full object-cover ring-1 ring-black/10" />}

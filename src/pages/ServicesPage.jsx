@@ -1,4 +1,5 @@
 // src/pages/ServicesPage.jsx
+import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
 import HomeServices from "../components/HomeServices";
 
@@ -19,6 +20,10 @@ const PRICING = [
 export default function ServicesPage() {
     return (
         <main className="mx-auto max-w-6xl px-4 py-14">
+            <Helmet>
+                <title>Services & Pricing | Blessed N Polished</title>
+                <meta name="description" content="View our nail services and starting prices — manicures, gel sets, Swarovski crystals, XXL nail art, and more. Located in Buckeye, AZ." />
+            </Helmet>
             <h1 className="text-3xl md:text-4xl font-extrabold mb-2">Services & Pricing</h1>
             <p className="text-sm text-neutral-500 mb-8">
                 Starting rates — final price depends on length, design complexity, and add-ons.{" "}
