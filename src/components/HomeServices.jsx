@@ -78,7 +78,10 @@ export default function HomeServices({ showViewAll }) {
                                 </div>
                             )}
                             <div className="p-5">
-                                <h3 className="font-semibold">{s.title}</h3>
+                                <div className="flex items-start justify-between gap-2">
+                                    <h3 className="font-semibold">{s.title}</h3>
+                                    {s.price && <span className="text-sm text-neutral-500 shrink-0">{s.price}</span>}
+                                </div>
                                 <p className="text-neutral-600 mt-2">{s.desc}</p>
                             </div>
                         </div>
