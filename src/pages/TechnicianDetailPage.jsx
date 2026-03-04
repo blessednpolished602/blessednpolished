@@ -6,6 +6,7 @@ import { db } from "../lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
 import SocialLinks from "../components/SocialLinks";
 import Lightbox from "../components/Lightbox";
+import { trackEvent } from "../lib/analytics";
 
 
 export default function TechnicianDetailPage() {
@@ -19,7 +20,9 @@ export default function TechnicianDetailPage() {
         setTech(undefined);
         getDoc(doc(db, "technicians", techId)).then((d) => {
             if (cancelled) return;
-            setTech(d.exists() ? { id: d.id, ...d.data() } : null);
+            const data = d.exists() ? { id: d.id, ...d.data() } : null;
+            setTech(data);
+            if (data) trackEvent("technician_profile_view", { tech_id: techId, tech_name: data.name });
         });
         return () => { cancelled = true; };
     }, [techId]);
