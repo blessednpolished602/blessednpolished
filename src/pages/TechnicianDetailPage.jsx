@@ -42,7 +42,7 @@ export default function TechnicianDetailPage() {
                             <SocialLinks
                                 className="mt-3"
                                 size={18}
-                                gap="gap-2"
+                                gap={8}
                                 socials={tech.socials}
                                 emailAsContact={true}
                                 contactQuery={{ tech: tech.name, source: "tech-card" }}

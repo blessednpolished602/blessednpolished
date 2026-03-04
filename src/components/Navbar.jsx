@@ -204,7 +204,7 @@ export default function Navbar() {
 
                                             {/* social icons */}
                                             <div className="pt-4 flex justify-center">
-                                                <SocialLinks size={24} gap={18} monochrome={true} />
+                                                <SocialLinks size={24} gap={18} />
                                             </div>
                                         </>
                                     );

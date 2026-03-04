@@ -11,7 +11,7 @@ import { SiTiktok } from "react-icons/si";
 export default function SocialLinks({
     className = "",
     size = 20,
-    gap = "gap-4",
+    gap = 16,
     brand = false,
     links,      // optional advanced override (array)
     socials,    // <-- use this for technician cards
@@ -56,7 +56,7 @@ export default function SocialLinks({
         "hover:-translate-y-0.5 focus:outline-none focus-visible:ring focus-visible:ring-black/10";
 
     return (
-        <nav aria-label="Social media" className={`flex items-center justify-center w-full ${gap} ${className}`}>
+        <nav aria-label="Social media" style={{ gap }} className={`flex items-center justify-center w-full ${className}`}>
             {finalLinks.map(({ label, type, Icon, href, to, color }) =>
                 type === "external" ? (
                     <a
