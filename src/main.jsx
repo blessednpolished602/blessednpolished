@@ -14,6 +14,7 @@ import ContactPage from "./pages/ContactPage.jsx";
 // NEW
 import TechniciansPage from "./pages/TechniciansPage.jsx";
 import TechnicianDetailPage from "./pages/TechnicianDetailPage.jsx";
+import AvailabilityPage from "./pages/AvailabilityPage.jsx";
 
 import "./index.css";
 
@@ -34,6 +35,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             {/* Technicians */}
             <Route path="technicians" element={<TechniciansPage />} />
             <Route path="technicians/:techId" element={<TechnicianDetailPage />} />
+            <Route path="availability" element={<AvailabilityPage />} />
             <Route path="contact" element={<ContactPage />} />
           </Route>
 
