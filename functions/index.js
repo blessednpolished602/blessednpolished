@@ -1,17 +1,36 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
+const { Resend } = require("resend");
+
+const resendApiKey = defineSecret("RESEND_API_KEY");
+const resendFromEmail = defineSecret("RESEND_FROM_EMAIL");
 
 admin.initializeApp();
 const db = admin.firestore();
 
 const SLOT_SIZE_MIN = 30;
 const TIMEZONE = "America/Phoenix";
+const DOW_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 /**
- * Returns all 30-min slot startMin values a booking occupies.
- * e.g. startMin=540, durationMin=60 → [540, 570]
+ * Returns { startMin, endMin } for dateStr given the hours config from site/settings,
+ * null if explicitly closed, or undefined if not configured.
+ */
+function hoursForDate(hours, dateStr) {
+  if (!hours) return undefined;
+  const [y, mo, d] = dateStr.split("-").map(Number);
+  const dow = DOW_KEYS[new Date(y, mo - 1, d).getDay()];
+  const override = hours.byDay?.[dow];
+  if (override === null) return null;            // explicitly closed
+  return override ?? hours.default ?? undefined; // custom | default | unset
+}
+
+/**
+ * Returns all slot startMin values a booking occupies.
+ * e.g. startMin=540, durationMin=60, slotSizeMin=30 → [540, 570]
  */
 function lockedSlots(startMin, durationMin, slotSizeMin = SLOT_SIZE_MIN) {
   const count = Math.ceil(durationMin / slotSizeMin);
@@ -26,12 +45,83 @@ function shuffle(arr) {
   }
 }
 
+// ── Email helpers ───────────────────────────────────────────────────────────────
+
+function formatTime(startMin) {
+  const h = Math.floor(startMin / 60);
+  const m = startMin % 60;
+  const ampm = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+function formatDate(dateStr) {
+  const [y, mo, d] = dateStr.split("-").map(Number);
+  return new Date(y, mo - 1, d).toLocaleDateString("en-US", {
+    weekday: "long", year: "numeric", month: "long", day: "numeric",
+  });
+}
+
+function escHtml(str) {
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+async function sendConfirmationEmail({ apiKey, fromEmail, to, clientName, serviceName, techName, date, startMin, bookingId }) {
+  const name = escHtml(clientName);
+  const svc  = escHtml(serviceName);
+  const tech = escHtml(techName);
+  const resend = new Resend(apiKey);
+  await resend.emails.send({
+    from: fromEmail,
+    to,
+    subject: `Booking Confirmed – ${serviceName} on ${formatDate(date)}`,
+    html: `
+      <p>Hi ${name},</p>
+      <p>Your appointment has been confirmed. Here are your booking details:</p>
+      <ul>
+        <li><strong>Service:</strong> ${svc}</li>
+        <li><strong>Technician:</strong> ${tech}</li>
+        <li><strong>Date:</strong> ${formatDate(date)}</li>
+        <li><strong>Time:</strong> ${formatTime(startMin)} (${TIMEZONE})</li>
+        <li><strong>Booking ID:</strong> ${bookingId}</li>
+      </ul>
+      <p>If you need to make changes, please contact us directly.</p>
+      <p>We look forward to seeing you!</p>
+    `,
+  });
+}
+
+function tryEmail(secretKey, secretFrom, client, serviceName, result, date, startMin) {
+  if (!client.email) return;
+  const apiKey = secretKey.value();
+  const fromEmail = secretFrom.value();
+  if (!apiKey || !fromEmail) {
+    console.warn("RESEND_API_KEY or RESEND_FROM_EMAIL not set — skipping confirmation email");
+    return;
+  }
+  sendConfirmationEmail({
+    apiKey, fromEmail,
+    to: client.email,
+    clientName: client.name.trim(),
+    serviceName,
+    techName: result.techName,
+    date,
+    startMin,
+    bookingId: result.bookingId,
+  }).catch((err) => console.error("Confirmation email failed:", err));
+}
+
 /**
  * Core transaction: read lock docs, abort if any exist, then write locks + booking.
  * Throws plain Error("SLOT_TAKEN") on conflict so callers can retry with another tech.
  */
 async function _bookSpecificTech({
-  techId, techName, date, startMin, durationMin,
+  techId, techName, date, startMin, durationMin, slotSizeMin,
   requiredSlots, serviceId, serviceName, client,
 }) {
   const bookingRef = db.collection("bookings").doc();
@@ -61,6 +151,7 @@ async function _bookSpecificTech({
       date,
       startMin,
       durationMin,
+      slotSizeMin,
       timezone: TIMEZONE,
       name: client.name.trim(),
       email: client.email || null,
@@ -77,7 +168,7 @@ async function _bookSpecificTech({
 
 // ── createBooking ──────────────────────────────────────────────────────────────
 
-exports.createBooking = onCall(async (request) => {
+exports.createBooking = onCall({ secrets: [resendApiKey, resendFromEmail], invoker: "public" }, async (request) => {
   const { techId, date, startMin, serviceId, serviceName, durationMin, client } =
     request.data ?? {};
 
@@ -90,6 +181,10 @@ exports.createBooking = onCall(async (request) => {
   }
   if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     throw new HttpsError("invalid-argument", "date must be YYYY-MM-DD");
+  }
+  const todayDate = new Date().toLocaleDateString("en-CA", { timeZone: TIMEZONE });
+  if (date < todayDate) {
+    throw new HttpsError("invalid-argument", "Cannot book a date in the past");
   }
   if (!Number.isInteger(startMin) || startMin < 0 || startMin > 1439) {
     throw new HttpsError("invalid-argument", "startMin must be an integer 0–1439");
@@ -106,8 +201,41 @@ exports.createBooking = onCall(async (request) => {
   if (!techId || typeof techId !== "string") {
     throw new HttpsError("invalid-argument", "techId is required (use 'any' for any available)");
   }
+  if (client.name.trim().length > 200) {
+    throw new HttpsError("invalid-argument", "client.name must be 200 characters or fewer");
+  }
+  if (client.email && (typeof client.email !== "string" || client.email.length > 200)) {
+    throw new HttpsError("invalid-argument", "client.email must be a string of 200 characters or fewer");
+  }
+  if (client.phone && (typeof client.phone !== "string" || client.phone.length > 30)) {
+    throw new HttpsError("invalid-argument", "client.phone must be a string of 30 characters or fewer");
+  }
+  if (client.notes != null) {
+    if (typeof client.notes !== "string") {
+      throw new HttpsError("invalid-argument", "client.notes must be a string");
+    }
+    if (client.notes.length > 500) {
+      throw new HttpsError("invalid-argument", "client.notes must be 500 characters or fewer");
+    }
+  }
+  if (durationMin > 480) {
+    throw new HttpsError("invalid-argument", "durationMin cannot exceed 480 minutes");
+  }
 
-  const requiredSlots = lockedSlots(startMin, durationMin);
+  // ── Read site settings (hours + slotSizeMin) ────────────────────────────────
+  const settingsSnap = await db.doc("site/settings").get();
+  const settingsData = settingsSnap.exists ? settingsSnap.data() : {};
+  const rawSlotSize = settingsData.slotSizeMin;
+  const slotSizeMin = (Number.isInteger(rawSlotSize) && rawSlotSize > 0) ? rawSlotSize : SLOT_SIZE_MIN;
+
+  const requiredSlots = lockedSlots(startMin, durationMin, slotSizeMin);
+
+  // ── Validate service from Firestore (source of truth for name) ─────────────
+  const serviceSnap = await db.doc(`signatureLooks/${serviceId}`).get();
+  if (!serviceSnap.exists || serviceSnap.data().enabled === false) {
+    throw new HttpsError("not-found", "Service not found or unavailable");
+  }
+  const resolvedServiceName = serviceSnap.data().title || serviceSnap.data().name || serviceId;
 
   // ── Specific technician ───────────────────────────────────────────────────────
   if (techId !== "any") {
@@ -122,58 +250,96 @@ exports.createBooking = onCall(async (request) => {
       throw new HttpsError("failed-precondition", "That technician is unavailable that day");
     }
 
-    // Check availability doc exists and contains all required slots
-    const availSnap = await db.doc(`availability/${techId}_${date}`).get();
-    if (!availSnap.exists) {
-      throw new HttpsError("not-found", "No availability for that technician on that date");
+    // Validate business hours
+    const dayHours = hoursForDate(settingsData.hours, date);
+    if (dayHours === null) {
+      throw new HttpsError("failed-precondition", "The shop is closed on that day");
     }
-    const availSlots = availSnap.data().slots || [];
-    const missing = requiredSlots.find((s) => !availSlots.includes(s));
-    if (missing !== undefined) {
-      throw new HttpsError(
-        "failed-precondition",
-        "Requested time is not within the technician's available slots"
-      );
+    if (dayHours && (startMin < dayHours.startMin || startMin + durationMin > dayHours.endMin)) {
+      throw new HttpsError("failed-precondition", "Requested time is outside business hours");
     }
 
-    const techName = availSnap.data().techName || techId;
+    // Read tech info and optional restriction doc in parallel
+    const [techSnap, availSnap] = await Promise.all([
+      db.doc(`technicians/${techId}`).get(),
+      db.doc(`availability/${techId}_${date}`).get(),
+    ]);
+
+    if (!techSnap.exists || techSnap.data().enabled === false) {
+      throw new HttpsError("not-found", "Technician not found or unavailable");
+    }
+
+    // If restriction doc exists, enforce it; absent → open by default
+    if (availSnap.exists) {
+      const availSlots = availSnap.data().slots || [];
+      const missing = requiredSlots.find((s) => !availSlots.includes(s));
+      if (missing !== undefined) {
+        throw new HttpsError(
+          "failed-precondition",
+          "Requested time is not within the technician's available slots"
+        );
+      }
+    }
+
+    const techName = techSnap.data().name || techId;
+    let result;
     try {
-      return await _bookSpecificTech({
-        techId, techName, date, startMin, durationMin,
-        requiredSlots, serviceId, serviceName, client,
+      result = await _bookSpecificTech({
+        techId, techName, date, startMin, durationMin, slotSizeMin,
+        requiredSlots, serviceId, serviceName: resolvedServiceName, client,
       });
     } catch (e) {
       if (e.message === "SLOT_TAKEN") {
+        console.warn(`Booking SLOT_TAKEN: techId=${techId} date=${date} startMin=${startMin}`);
         throw new HttpsError("aborted", "SLOT_TAKEN");
       }
+      console.error(`Booking failed: techId=${techId} serviceId=${serviceId} date=${date} startMin=${startMin}`, e);
       throw new HttpsError("internal", e.message);
     }
+    tryEmail(resendApiKey, resendFromEmail, client, resolvedServiceName, result, date, startMin);
+    console.log(`Booking created: bookingId=${result.bookingId} techId=${result.techId} serviceId=${serviceId} date=${date} startMin=${startMin}`);
+    return result;
   }
 
   // ── Any available ─────────────────────────────────────────────────────────────
+  // Validate business hours
+  const anyDayHours = hoursForDate(settingsData.hours, date);
+  if (anyDayHours === null) {
+    throw new HttpsError("failed-precondition", "The shop is closed on that day");
+  }
+  if (anyDayHours && (startMin < anyDayHours.startMin || startMin + durationMin > anyDayHours.endMin)) {
+    throw new HttpsError("failed-precondition", "Requested time is outside business hours");
+  }
+
   // Check shop-wide block first
   const shopBlock = await db.doc(`blockedDays/all_${date}`).get();
   if (shopBlock.exists) {
     throw new HttpsError("failed-precondition", "The shop is closed that day");
   }
 
-  // Collect individually blocked tech IDs for that date
-  const blockSnaps = await db.collection("blockedDays").where("date", "==", date).get();
+  // Load enabled techs, per-tech blocks, and optional restriction docs in parallel
+  const [techsSnap, blockSnaps, availSnaps] = await Promise.all([
+    db.collection("technicians").where("enabled", "==", true).get(),
+    db.collection("blockedDays").where("date", "==", date).get(),
+    db.collection("availability").where("date", "==", date).get(),
+  ]);
+
   const blockedTechIds = new Set(blockSnaps.docs.map((d) => d.data().techId));
 
-  // Query availability docs that contain startMin
-  const availSnaps = await db
-    .collection("availability")
-    .where("date", "==", date)
-    .where("slots", "array-contains", startMin)
-    .get();
+  // Build restriction map: techId → slots[] (only for techs with a restriction doc)
+  const restrictMap = {};
+  availSnaps.docs.forEach((d) => { restrictMap[d.data().techId] = d.data().slots || []; });
 
-  // Filter: tech must have ALL required slots and not be blocked
-  const candidates = availSnaps.docs
-    .map((d) => d.data())
-    .filter((d) => {
-      if (blockedTechIds.has(d.techId)) return false;
-      return requiredSlots.every((s) => (d.slots || []).includes(s));
+  // A tech is a candidate if: not blocked, and passes restriction check (if any)
+  const candidates = techsSnap.docs
+    .map((d) => ({ techId: d.id, techName: d.data().name || d.id }))
+    .filter(({ techId }) => {
+      if (blockedTechIds.has(techId)) return false;
+      // If restriction doc exists, all required slots must be listed
+      if (Object.prototype.hasOwnProperty.call(restrictMap, techId)) {
+        return requiredSlots.every((s) => restrictMap[techId].includes(s));
+      }
+      return true; // no restriction → open by default
     });
 
   if (candidates.length === 0) {
@@ -182,23 +348,29 @@ exports.createBooking = onCall(async (request) => {
 
   shuffle(candidates);
 
-  for (const avail of candidates) {
+  for (const cand of candidates) {
+    let result;
     try {
-      return await _bookSpecificTech({
-        techId: avail.techId,
-        techName: avail.techName,
+      result = await _bookSpecificTech({
+        techId: cand.techId,
+        techName: cand.techName,
         date,
         startMin,
         durationMin,
+        slotSizeMin,
         requiredSlots,
         serviceId,
-        serviceName,
+        serviceName: resolvedServiceName,
         client,
       });
     } catch (e) {
       if (e.message === "SLOT_TAKEN") continue; // race lost — try next candidate
+      console.error(`Booking failed: techId=${cand.techId} serviceId=${serviceId} date=${date} startMin=${startMin}`, e);
       throw new HttpsError("internal", e.message);
     }
+    tryEmail(resendApiKey, resendFromEmail, client, resolvedServiceName, result, date, startMin);
+    console.log(`Booking created: bookingId=${result.bookingId} techId=${result.techId} serviceId=${serviceId} date=${date} startMin=${startMin}`);
+    return result;
   }
 
   throw new HttpsError("resource-exhausted", "ALL_SLOTS_TAKEN");
@@ -206,7 +378,7 @@ exports.createBooking = onCall(async (request) => {
 
 // ── cancelBooking (admin only) ─────────────────────────────────────────────────
 
-exports.cancelBooking = onCall(async (request) => {
+exports.cancelBooking = onCall({ invoker: "public" }, async (request) => {
   // Enforce admin custom claim
   if (!request.auth || request.auth.token.admin !== true) {
     throw new HttpsError("permission-denied", "Admin only");
@@ -223,12 +395,14 @@ exports.cancelBooking = onCall(async (request) => {
     throw new HttpsError("not-found", "Booking not found");
   }
 
-  const { techId, date, startMin, durationMin, status } = bookingSnap.data();
+  const { techId, date, startMin, durationMin, status, slotSizeMin: savedSlotSize } = bookingSnap.data();
   if (status === "cancelled") {
     throw new HttpsError("failed-precondition", "Booking is already cancelled");
   }
 
-  const slots = lockedSlots(startMin, durationMin);
+  // Use the slotSizeMin stored at booking time; fall back to default for old records.
+  const slotSizeMin = (Number.isInteger(savedSlotSize) && savedSlotSize > 0) ? savedSlotSize : SLOT_SIZE_MIN;
+  const slots = lockedSlots(startMin, durationMin, slotSizeMin);
 
   await db.runTransaction(async (txn) => {
     for (const s of slots) {
@@ -240,5 +414,6 @@ exports.cancelBooking = onCall(async (request) => {
     });
   });
 
+  console.log(`Booking cancelled: bookingId=${bookingId} techId=${techId} date=${date}`);
   return { ok: true, bookingId };
 });

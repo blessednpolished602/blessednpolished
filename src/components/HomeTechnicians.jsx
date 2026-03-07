@@ -82,6 +82,8 @@ export default function HomeTechnicians({ showViewAll }) {
                                                     src={cover}
                                                     alt={t.name}
                                                     loading="lazy"
+                                                    decoding="async"
+                                                    sizes="(max-width:640px) 100vw, (max-width:1024px) 50vw, 33vw"
                                                     className="w-full h-full object-contain"
                                                 />
                                             </div>
@@ -114,15 +116,13 @@ export default function HomeTechnicians({ showViewAll }) {
                                             >
                                                 View profile
                                             </Link>
-                                            {t.squareStaffId && (
-                                                <Link
-                                                    to={`/book/${t.id}`}
-                                                    className="underline text-sm"
-                                                    onClick={() => trackEvent("technician_card_click", { tech_name: t.name, action: "book" })}
-                                                >
-                                                    Book {t.name.split(" ")[0]}
-                                                </Link>
-                                            )}
+                                            <Link
+                                                to={`/book/${t.id}`}
+                                                className="underline text-sm"
+                                                onClick={() => trackEvent("technician_card_click", { tech_name: t.name, action: "book" })}
+                                            >
+                                                Book {t.name.split(" ")[0]}
+                                            </Link>
                                         </div>
                                     </div>
                                 </article>

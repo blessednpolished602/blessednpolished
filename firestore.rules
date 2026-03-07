@@ -128,23 +128,25 @@ service cloud.firestore {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // slotLocks  (concurrency mutex — one doc per 30-min slot unit per booking)
-    // Booking UI does NOT read slotLocks; availability docs are the sole source
-    // of truth for Step 4 display. All reads and writes go through admin SDK.
+    // slotLocks  (concurrency mutex — one doc per slot unit per booking)
+    // Public read: booking page Step 4 queries these to filter already-taken
+    // slots in real time (opt-out model — no availability doc = open by default).
+    // Writes go through Cloud Functions (admin SDK) only.
     // ─────────────────────────────────────────────────────────────────────
     match /slotLocks/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if true;
+      allow write: if false;
     }
 
     // ─────────────────────────────────────────────────────────────────────
     // bookings  (confirmed booking records)
     // Public:  NONE — bookings are created by Cloud Function only
-    // Admin:   read + update + delete (for management UI and cancellation)
-    // Write:   Cloud Functions (admin SDK) create; admin can update/delete
+    // Admin:   read + update only (cancellation routes through cancelBooking CF)
+    // Write:   Cloud Functions (admin SDK) create; admin can update status only
     // ─────────────────────────────────────────────────────────────────────
     match /bookings/{docId} {
-      allow read, update, delete: if isAdmin();
-      allow create: if false;
+      allow read, update: if isAdmin();
+      allow create, delete: if false;
     }
 
     // ─────────────────────────────────────────────────────────────────────

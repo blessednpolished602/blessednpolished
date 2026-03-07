@@ -4,27 +4,28 @@ import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { db, functions } from "../lib/firebase";
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
+import useSiteSettings from "../hooks/useSiteSettings";
 import { httpsCallable } from "firebase/functions";
 import { trackEvent } from "../lib/analytics";
 import { minToTimeString, lockedSlots } from "../lib/timeUtils";
 
 // ── Module-level helpers ───────────────────────────────────────────────────────
 
-const DAY_ABBR    = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const DAY_ABBR = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
 const MONTH_NAMES = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
 const COOLDOWN_KEY = "bnp_booking_cooldown";
-const COOLDOWN_MS  = 60_000;
+const COOLDOWN_MS = 60_000;
 
 function pad(n) { return String(n).padStart(2, "0"); }
 function toDateStr(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
-function todayStr()   { return toDateStr(new Date()); }
+function todayStr() { return toDateStr(new Date()); }
 
 /** Returns cells array: null = empty padding, number = day-of-month */
 function buildCells(year, month) {
-  const firstDow    = new Date(year, month, 1).getDay();
+  const firstDow = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   return [
     ...Array(firstDow).fill(null),
@@ -32,28 +33,6 @@ function buildCells(year, month) {
   ];
 }
 
-/** True if slots contains at least one valid startMin for durationMin */
-function hasValidStart(slots, durationMin) {
-  const set = new Set(slots);
-  return (slots || []).some(s => lockedSlots(s, durationMin).every(r => set.has(r)));
-}
-
-/**
- * From an array of availability data objects, return all startMin values where
- * at least one tech has every required consecutive slot.
- */
-function getValidStarts(availDocs, durationMin) {
-  const allMins = new Set(availDocs.flatMap(d => d.slots || []));
-  return [...allMins]
-    .filter(startMin => {
-      const required = lockedSlots(startMin, durationMin);
-      return availDocs.some(d => {
-        const ts = new Set(d.slots || []);
-        return required.every(s => ts.has(s));
-      });
-    })
-    .sort((a, b) => a - b);
-}
 
 function canBookNow() {
   try {
@@ -82,24 +61,17 @@ export default function BookingPage() {
   const { techId: urlTechId } = useParams();
 
   // ── Flow state ─────────────────────────────────────────────────────────────
-  const [step,          setStep]          = useState(1);
-  const [service,       setService]       = useState(null);  // {id, name, durationMin, price}
-  const [tech,          setTech]          = useState(null);  // {id, name}
-  const [date,          setDate]          = useState(null);  // "YYYY-MM-DD"
-  const [startMin,      setStartMin]      = useState(null);
-  const [client,        setClient]        = useState({ name: "", email: "", phone: "", notes: "" });
-  const [honeypot,      setHoneypot]      = useState("");
-  const [submitting,    setSubmitting]    = useState(false);
-  const [error,         setError]         = useState(null);
+  const [step, setStep] = useState(1);
+  const [service, setService] = useState(null);  // {id, name, durationMin, price}
+  const [tech, setTech] = useState(null);  // {id, name}
+  const [date, setDate] = useState(null);  // "YYYY-MM-DD"
+  const [startMin, setStartMin] = useState(null);
+  const [client, setClient] = useState({ name: "", email: "", phone: "", notes: "" });
+  const [honeypot, setHoneypot] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
   const [bookingResult, setBookingResult] = useState(null);
-  const [siteSettings,  setSiteSettings]  = useState(null);
-
-  // ── Fetch site settings (hours, timezone, etc.) ─────────────────────────────
-  useEffect(() => {
-    getDoc(doc(db, "site", "settings"))
-      .then(d => { if (d.exists()) setSiteSettings(d.data()); })
-      .catch(() => {});
-  }, []);
+  const siteSettings = useSiteSettings();
 
   // ── Step 1: Services ────────────────────────────────────────────────────────
   const [services, setServices] = useState(null);
@@ -119,69 +91,44 @@ export default function BookingPage() {
     if (!urlTechId) return;
     getDoc(doc(db, "technicians", urlTechId))
       .then(d => { if (d.exists()) setTech({ id: d.id, name: d.data().name }); })
-      .catch(() => {});
+      .catch(() => { });
   }, [urlTechId]);
 
   // ── Step 2: Technicians ─────────────────────────────────────────────────────
   const [techs, setTechs] = useState(null);
   useEffect(() => {
     if (step !== 2 || techs !== null) return;
-    getDocs(query(collection(db, "technicians"), where("active", "==", true)))
+    getDocs(query(collection(db, "technicians"), where("enabled", "==", true)))
       .then(snap => setTechs(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
       .catch(() => setTechs([]));
   }, [step, techs]);
 
-  // ── Step 3: Availability + blocked days for current view month ─────────────
+  // ── Step 3: Blocked days for current view month ────────────────────────────
   const today = new Date();
-  const [viewYear,   setViewYear]   = useState(today.getFullYear());
-  const [viewMonth,  setViewMonth]  = useState(today.getMonth());
-  const [availMap,   setAvailMap]   = useState(null); // { [docId]: data }
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
   const [blockedSet, setBlockedSet] = useState(null); // Set<docId>
 
   useEffect(() => {
     if (step !== 3) return;
-    setAvailMap(null);
     setBlockedSet(null);
 
     const start = `${viewYear}-${pad(viewMonth + 1)}-01`;
-    const end   = toDateStr(new Date(viewYear, viewMonth + 1, 0));
+    const end = toDateStr(new Date(viewYear, viewMonth + 1, 0));
 
-    Promise.all([
-      getDocs(query(collection(db, "availability"), where("date", ">=", start), where("date", "<=", end))),
-      getDocs(query(collection(db, "blockedDays"),  where("date", ">=", start), where("date", "<=", end))),
-    ]).then(([availSnap, blockedSnap]) => {
-      const am = {};
-      availSnap.docs.forEach(d => { am[d.id] = d.data(); });
-      setAvailMap(am);
-      setBlockedSet(new Set(blockedSnap.docs.map(d => d.id)));
-    }).catch(() => {
-      setAvailMap({});
-      setBlockedSet(new Set());
-    });
+    getDocs(query(collection(db, "blockedDays"), where("date", ">=", start), where("date", "<=", end)))
+      .then(snap => setBlockedSet(new Set(snap.docs.map(d => d.id))))
+      .catch(() => setBlockedSet(new Set()));
   }, [step, viewYear, viewMonth]);
 
   function isDateEnabled(year, month, day) {
     const ds = `${year}-${pad(month + 1)}-${pad(day)}`;
-    if (ds < todayStr() || !availMap || !blockedSet) return false;
+    if (ds < todayStr() || !blockedSet) return false;
     if (blockedSet.has(`all_${ds}`)) return false;
-
     // Disable days marked closed in business hours
     if (siteSettings?.hours && getHoursForDate(siteSettings.hours, ds) === null) return false;
-
-    const dur = service?.durationMin || 60;
-
-    if (tech?.id !== "any") {
-      if (blockedSet.has(`${tech.id}_${ds}`)) return false;
-      const avail = availMap[`${tech.id}_${ds}`];
-      return avail ? hasValidStart(avail.slots || [], dur) : false;
-    }
-
-    // "Any available": at least one non-blocked tech has a valid start
-    return Object.values(availMap).some(d =>
-      d.date === ds &&
-      !blockedSet.has(`${d.techId}_${ds}`) &&
-      hasValidStart(d.slots || [], dur)
-    );
+    if (tech?.id !== "any" && blockedSet.has(`${tech.id}_${ds}`)) return false;
+    return true;
   }
 
   function prevMonth() {
@@ -202,21 +149,69 @@ export default function BookingPage() {
   useEffect(() => {
     if (step !== 4 || !date) return;
     setTimeSlots(null);
-    getDocs(query(collection(db, "availability"), where("date", "==", date)))
-      .then(snap => {
-        const docs = snap.docs
-          .map(d => d.data())
-          .filter(d => tech?.id === "any" || d.techId === tech?.id);
-        const dur = service?.durationMin || 60;
-        let starts = getValidStarts(docs, dur);
-        // Filter to within business hours for that weekday
-        if (siteSettings?.hours && date) {
-          const h = getHoursForDate(siteSettings.hours, date);
-          if (h) starts = starts.filter(m => m >= h.startMin && m + dur <= h.endMin);
+
+    const dur = service?.durationMin || 60;
+    const slotSize = siteSettings?.slotSizeMin ?? 30;
+    const hours = siteSettings?.hours ? getHoursForDate(siteSettings.hours, date) : null;
+
+    if (!hours) { setTimeSlots([]); return; }
+
+    // All business-hour slots for the day
+    const allSlots = [];
+    for (let m = hours.startMin; m + dur <= hours.endMin; m += slotSize) allSlots.push(m);
+
+    if (tech?.id !== "any") {
+      // Specific tech: load slotLocks + optional restriction doc in parallel
+      Promise.all([
+        getDocs(query(collection(db, "slotLocks"), where("date", "==", date))),
+        getDoc(doc(db, "availability", `${tech.id}_${date}`)),
+      ]).then(([lockSnap, availSnap]) => {
+        const lockedSet = new Set();
+        lockSnap.docs.forEach(d => {
+          if (d.data().techId === tech.id) lockedSet.add(d.data().startMin);
+        });
+        const restriction = availSnap.exists() ? new Set(availSnap.data().slots || []) : null;
+        const valid = allSlots.filter(s => {
+          const req = lockedSlots(s, dur, slotSize);
+          if (req.some(r => lockedSet.has(r))) return false;
+          if (restriction && !req.every(r => restriction.has(r))) return false;
+          return true;
+        });
+        setTimeSlots(valid);
+      }).catch(() => setTimeSlots([]));
+    } else {
+      // Any tech: load techs, blocked days, slotLocks, and restriction docs in parallel
+      Promise.all([
+        getDocs(query(collection(db, "technicians"), where("enabled", "==", true))),
+        getDocs(query(collection(db, "blockedDays"), where("date", "==", date))),
+        getDocs(query(collection(db, "slotLocks"), where("date", "==", date))),
+        getDocs(query(collection(db, "availability"), where("date", "==", date))),
+      ]).then(([techsSnap, blockedSnap, lockSnap, availSnap]) => {
+        const blockedIds = new Set(blockedSnap.docs.map(d => d.data().techId));
+        const lockedMap = {};
+        lockSnap.docs.forEach(d => {
+          const { techId: tid, startMin: s } = d.data();
+          if (!lockedMap[tid]) lockedMap[tid] = new Set();
+          lockedMap[tid].add(s);
+        });
+        const restrictMap = {};
+        availSnap.docs.forEach(d => {
+          restrictMap[d.data().techId] = new Set(d.data().slots || []);
+        });
+        const techIds = techsSnap.docs.map(d => d.id)
+          .filter(tid => !blockedIds.has("all") && !blockedIds.has(tid));
+
+        function techCanBook(tid, startSlot) {
+          const req = lockedSlots(startSlot, dur, slotSize);
+          if (tid in restrictMap && !req.every(r => restrictMap[tid].has(r))) return false;
+          const locked = lockedMap[tid] ?? new Set();
+          return req.every(r => !locked.has(r));
         }
-        setTimeSlots(starts);
-      })
-      .catch(() => setTimeSlots([]));
+
+        const valid = allSlots.filter(s => techIds.some(tid => techCanBook(tid, s)));
+        setTimeSlots(valid);
+      }).catch(() => setTimeSlots([]));
+    }
   }, [step, date, tech, service, siteSettings]);
 
   // ── Submit ──────────────────────────────────────────────────────────────────
@@ -230,14 +225,14 @@ export default function BookingPage() {
     try {
       const createBooking = httpsCallable(functions, "createBooking");
       const result = await createBooking({
-        techId:      tech.id,
+        techId: tech.id,
         date,
         startMin,
-        serviceId:   service.id,
-        serviceName: service.name,
+        serviceId: service.id,
+        serviceName: service.title || service.name,
         durationMin: service.durationMin || 60,
         client: {
-          name:  client.name.trim(),
+          name: client.name.trim(),
           email: client.email.trim() || undefined,
           phone: client.phone.trim() || undefined,
           notes: client.notes.trim() || undefined,
@@ -245,11 +240,11 @@ export default function BookingPage() {
       });
 
       localStorage.setItem(COOLDOWN_KEY, Date.now().toString());
-      trackEvent("booking_confirmed", { service: service.name, tech: tech.name });
+      trackEvent("booking_confirmed", { service: service.title || service.name, tech: tech.name });
       setBookingResult(result.data);
     } catch (err) {
-      const code = err?.code    ?? "";
-      const msg  = err?.message ?? "";
+      const code = err?.code ?? "";
+      const msg = err?.message ?? "";
 
       if (code === "functions/aborted" || msg === "SLOT_TAKEN") {
         setError("That time was just taken by another booking. Please pick a different slot.");
@@ -276,7 +271,7 @@ export default function BookingPage() {
   // ── Back navigation ─────────────────────────────────────────────────────────
   function goBack() {
     setError(null);
-    if      (step === 2) { setStep(1); }
+    if (step === 2) { setStep(1); }
     else if (step === 3) { setStep(urlTechId && tech ? 1 : 2); }
     else if (step === 4) { setStep(3); setDate(null); setStartMin(null); }
     else if (step === 5) { setStep(4); setStartMin(null); }
@@ -292,7 +287,7 @@ export default function BookingPage() {
           <h1 className="text-2xl font-bold">You&rsquo;re booked!</h1>
           <p className="mt-2 text-neutral-600">Your appointment is confirmed. We&rsquo;ll see you soon.</p>
           <div className="mt-6 rounded-2xl border border-neutral-200 p-5 text-left space-y-2 text-sm">
-            <p><span className="font-medium">Service:</span> {service.name}</p>
+            <p><span className="font-medium">Service:</span> {service.title || service.name}</p>
             <p><span className="font-medium">With:</span> {bookingResult.techName}</p>
             <p><span className="font-medium">Date:</span> {date}</p>
             <p><span className="font-medium">Time:</span> {minToTimeString(startMin)}</p>
@@ -323,8 +318,8 @@ export default function BookingPage() {
         {/* Progress bar */}
         <div className="mt-6 flex items-center">
           {STEP_LABELS.map((label, i) => {
-            const n      = i + 1;
-            const done   = step > n;
+            const n = i + 1;
+            const done = step > n;
             const active = step === n;
             return (
               <div key={n} className="flex items-center flex-1 min-w-0">
@@ -366,14 +361,14 @@ export default function BookingPage() {
                       className="text-left rounded-2xl border border-neutral-200 p-4 hover:border-black/30 hover:bg-neutral-50 transition"
                     >
                       <div className="flex justify-between items-center gap-2">
-                        <span className="font-medium">{svc.name}</span>
+                        <span className="font-medium">{svc.title || svc.name}</span>
                         {svc.price && <span className="text-sm text-neutral-500 shrink-0">{svc.price}</span>}
                       </div>
-                      {(svc.durationMin || svc.description) && (
+                      {(svc.durationMin || svc.desc) && (
                         <p className="mt-0.5 text-xs text-neutral-500">
                           {svc.durationMin && <span>{svc.durationMin} min</span>}
-                          {svc.durationMin && svc.description && " · "}
-                          {svc.description}
+                          {svc.durationMin && svc.desc && " · "}
+                          {svc.desc}
                         </p>
                       )}
                     </button>
@@ -423,7 +418,7 @@ export default function BookingPage() {
             <div>
               <h2 className="text-lg font-semibold mb-1">Choose a date</h2>
               <p className="text-xs text-neutral-500 mb-4">
-                {service?.name} · {tech?.name}
+                {service?.title || service?.name} · {tech?.name}
                 {urlTechId && tech && (
                   <> · <button onClick={() => { setTech(null); setStep(2); }} className="underline">Change technician</button></>
                 )}
@@ -453,15 +448,15 @@ export default function BookingPage() {
               </div>
 
               {/* Calendar grid */}
-              {availMap === null ? (
-                <div className="py-10 text-center text-sm text-neutral-400">Loading availability…</div>
+              {blockedSet === null ? (
+                <div className="py-10 text-center text-sm text-neutral-400">Loading…</div>
               ) : (
                 <div className="grid grid-cols-7 gap-y-1">
                   {buildCells(viewYear, viewMonth).map((day, i) => {
                     if (!day) return <div key={`e-${i}`} />;
-                    const ds      = `${viewYear}-${pad(viewMonth + 1)}-${pad(day)}`;
+                    const ds = `${viewYear}-${pad(viewMonth + 1)}-${pad(day)}`;
                     const enabled = isDateEnabled(viewYear, viewMonth, day);
-                    const selected= date === ds;
+                    const selected = date === ds;
                     return (
                       <button
                         key={ds}
@@ -469,9 +464,9 @@ export default function BookingPage() {
                         onClick={() => { setDate(ds); setStartMin(null); setStep(4); }}
                         className={[
                           "mx-auto w-9 h-9 rounded-full text-sm font-medium transition",
-                          selected              ? "bg-black text-white"                   : "",
-                          enabled && !selected  ? "hover:bg-neutral-100"                  : "",
-                          !enabled              ? "text-neutral-300 cursor-not-allowed"    : "cursor-pointer",
+                          selected ? "bg-black text-white" : "",
+                          enabled && !selected ? "hover:bg-neutral-100" : "",
+                          !enabled ? "text-neutral-300 cursor-not-allowed" : "cursor-pointer",
                         ].join(" ")}
                       >
                         {day}
@@ -489,7 +484,7 @@ export default function BookingPage() {
           {step === 4 && (
             <div>
               <h2 className="text-lg font-semibold mb-1">Choose a time</h2>
-              <p className="text-xs text-neutral-500 mb-4">{date} · {tech?.name} · {service?.name}</p>
+              <p className="text-xs text-neutral-500 mb-4">{date} · {tech?.name} · {service?.title || service?.name}</p>
 
               {timeSlots === null ? (
                 <p className="text-sm text-neutral-400">Loading…</p>
@@ -528,7 +523,7 @@ export default function BookingPage() {
               {/* Summary aside */}
               <div className="md:w-52 shrink-0 rounded-2xl bg-neutral-50 p-4 text-sm space-y-2">
                 <p className="font-semibold mb-1">Your appointment</p>
-                <p><span className="font-medium">Service</span><br /><span className="text-neutral-600">{service?.name}</span></p>
+                <p><span className="font-medium">Service</span><br /><span className="text-neutral-600">{service?.title || service?.name}</span></p>
                 <p><span className="font-medium">With</span><br /><span className="text-neutral-600">{tech?.name}</span></p>
                 <p><span className="font-medium">Date</span><br /><span className="text-neutral-600">{date}</span></p>
                 <p><span className="font-medium">Time</span><br /><span className="text-neutral-600">{minToTimeString(startMin)}</span></p>
@@ -599,7 +594,7 @@ export default function BookingPage() {
                   <label className="block text-sm font-medium mb-1" htmlFor="bk-notes">Notes</label>
                   <textarea
                     id="bk-notes"
-                    rows={3}
+                    rows={5}
                     maxLength={500}
                     value={client.notes}
                     onChange={e => setClient(c => ({ ...c, notes: e.target.value }))}
@@ -634,3 +629,5 @@ export default function BookingPage() {
     </main>
   );
 }
+
+

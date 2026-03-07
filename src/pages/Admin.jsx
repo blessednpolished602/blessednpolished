@@ -1,6 +1,7 @@
 // src/pages/Admin.jsx
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import Navbar from "../components/Navbar";
 
 import { auth, db, storage, functions } from "../lib/firebase";
@@ -118,6 +119,7 @@ export default function Admin() {
 
     return (
         <div className="min-h-dvh w-full overflow-x-clip bg-gradient-to-b from-[#f9d6d1] to-white">
+            <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
             <Navbar />
             <div className="mx-auto max-w-6xl p-6 space-y-10">
                 <header className="flex items-center justify-between">
@@ -943,7 +945,6 @@ function TechniciansManager() {
                     tiktok: newTech.tiktok || "",
                     email: newTech.email || "/contact",
                 },
-                squareStaffId: "",
                 gallery: [],
                 enabled: true,
                 createdAt: serverTimestamp(),
@@ -1034,7 +1035,6 @@ function TechEditorCard({ tech }) {
         tiktok: tech.socials?.tiktok || "",
         email: tech.socials?.email || "/contact",
     });
-    const [staffId, setStaffId] = useState(tech.squareStaffId || "");
     const [avatarFile, setAvatarFile] = useState(null);
     const [uploadPct, setUploadPct] = useState(null);
     const [saving, setSaving] = useState(false);
@@ -1054,7 +1054,6 @@ function TechEditorCard({ tech }) {
             tiktok: tech.socials?.tiktok || "",
             email: tech.socials?.email || "/contact",
         });
-        setStaffId(tech.squareStaffId || "");
         setAvatarFile(null);
         setUploadPct(null);
     }, [tech.id]);
@@ -1086,7 +1085,6 @@ function TechEditorCard({ tech }) {
                 bio: bio.trim(),
                 tags: tags ? tags.split(",").map(t => t.trim()).filter(Boolean) : [],
                 socials,
-                squareStaffId: staffId.trim(),
                 avatarUrl,
                 enabled,
                 updatedAt: serverTimestamp(),
@@ -1171,10 +1169,6 @@ function TechEditorCard({ tech }) {
                     <input className="border rounded-lg px-3 py-2" placeholder="Email or /contact"
                         value={socials.email} onChange={(e) => setSocials(s => ({ ...s, email: e.target.value }))} />
                 </div>
-
-                {/* Square staff id */}
-                <input className="border rounded-lg px-3 py-2" placeholder="Square staff ID (optional)"
-                    value={staffId} onChange={(e) => setStaffId(e.target.value)} />
 
                 {/* Avatar upload */}
                 <div className="flex flex-wrap items-center gap-3">
@@ -1294,6 +1288,8 @@ function BusinessHoursEditor() {
             }, { merge: true });
             setSaved(true);
             setTimeout(() => setSaved(false), 3000);
+        } catch (e) {
+            setErr("Save failed: " + (e.message ?? "unknown error"));
         } finally {
             setSaving(false);
         }
@@ -1389,7 +1385,7 @@ function ScheduleTab() {
 
     // Load active technicians once
     useEffect(() => {
-        getDocs(query(collection(db, "technicians"), where("active", "==", true)))
+        getDocs(query(collection(db, "technicians"), where("enabled", "==", true)))
             .then(snap => setTechs(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     }, []);
 
@@ -1429,12 +1425,13 @@ function ScheduleTab() {
     function toggleSlot(techId, slotMin) {
         if (locks[`${techId}_${slotMin}`]) return; // booked — cannot toggle
         setAvailMap(prev => {
-            const current = prev[techId]?.slots ?? [];
+            const restriction = prev[techId]; // undefined = no restriction doc (open by default)
+            const current = restriction !== undefined ? (restriction.slots ?? []) : daySlots;
             const has = current.includes(slotMin);
             return {
                 ...prev,
                 [techId]: {
-                    ...(prev[techId] ?? {}),
+                    ...(restriction ?? {}),
                     techId,
                     slots: has
                         ? current.filter(s => s !== slotMin)
@@ -1510,7 +1507,9 @@ function ScheduleTab() {
                                 <tbody>
                                     {techs.map(tech => {
                                         const isBlocked = blocked.has("all") || blocked.has(tech.id);
-                                        const slots = availMap[tech.id]?.slots ?? [];
+                                        // No restriction doc → open by default → show all business-hour slots
+                                        const restriction = availMap[tech.id];
+                                        const slots = restriction !== undefined ? (restriction.slots ?? []) : daySlots;
                                         return (
                                             <tr key={tech.id} className="border-t border-neutral-100">
                                                 <td className="px-2 py-1 font-medium whitespace-nowrap">{tech.name}</td>
@@ -1598,6 +1597,7 @@ function BookingsTab() {
     const [dateFrom,  setDateFrom]  = useState(adminTodayStr());
     const [dateTo,    setDateTo]    = useState(dateStrPlus(30));
     const [cancelling, setCancelling] = useState(null); // bookingId being cancelled
+    const [updating,   setUpdating]   = useState(null); // bookingId being marked complete/no-show
 
     // Load technician list for filter dropdown
     useEffect(() => {
@@ -1638,6 +1638,24 @@ function BookingsTab() {
             alert("Failed to cancel: " + (err.message || "Unknown error"));
         } finally {
             setCancelling(null);
+        }
+    }
+
+    async function handleMarkStatus(booking, newStatus) {
+        if (!confirm(`Mark booking for ${booking.name} on ${booking.date} as ${newStatus}?`)) return;
+        setUpdating(booking.id);
+        try {
+            const field = newStatus === "completed" ? "completedAt" : "noShowAt";
+            await updateDoc(doc(db, "bookings", booking.id), {
+                status: newStatus,
+                [field]: serverTimestamp(),
+            });
+            setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: newStatus } : b));
+        } catch (err) {
+            console.error("Status update failed:", err);
+            alert("Failed to update: " + (err.message || "Unknown error"));
+        } finally {
+            setUpdating(null);
         }
     }
 
@@ -1696,7 +1714,9 @@ function BookingsTab() {
                         className="border rounded-lg px-3 py-2"
                     >
                         <option value="all">All</option>
-                        <option value="confirmed">Confirmed</option>
+                        <option value="confirmed">Scheduled</option>
+                        <option value="completed">Completed</option>
+                        <option value="no-show">No-show</option>
                         <option value="cancelled">Cancelled</option>
                     </select>
                 </div>
@@ -1710,6 +1730,13 @@ function BookingsTab() {
                         className="border rounded-lg px-3 py-2"
                     />
                 </div>
+                <button
+                    type="button"
+                    className="self-end px-3 py-2 text-xs border rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 whitespace-nowrap"
+                    onClick={() => { setDateFrom(dateStrPlus(-90)); setDateTo(dateStrPlus(-1)); setFilterStatus("confirmed"); }}
+                >
+                    Past – needs attention
+                </button>
             </div>
 
             {loading && <p className="text-sm text-neutral-400">Loading…</p>}
@@ -1738,7 +1765,8 @@ function BookingsTab() {
                             {visible.map(b => (
                                 <tr key={b.id} className={[
                                     "border-t border-neutral-100 align-top",
-                                    b.status === "cancelled" ? "opacity-50" : "",
+                                    b.status === "cancelled" ? "opacity-50" :
+                                    (b.status === "confirmed" && b.date < adminTodayStr()) ? "bg-amber-50" : "",
                                 ].join(" ")}>
                                     <td className="py-2 pr-4 whitespace-nowrap">{b.date}</td>
                                     <td className="py-2 pr-4 whitespace-nowrap">
@@ -1756,22 +1784,43 @@ function BookingsTab() {
                                     <td className="py-2 pr-4 whitespace-nowrap">
                                         <span className={[
                                             "inline-block px-2 py-0.5 rounded-full text-xs font-medium",
-                                            b.status === "confirmed"
-                                                ? "bg-green-100 text-green-700"
-                                                : "bg-neutral-100 text-neutral-500",
+                                            b.status === "confirmed"  ? "bg-green-100 text-green-700" :
+                                            b.status === "completed"  ? "bg-blue-100 text-blue-700" :
+                                            b.status === "no-show"    ? "bg-amber-100 text-amber-700" :
+                                                                        "bg-neutral-100 text-neutral-500",
                                         ].join(" ")}>
-                                            {b.status}
+                                            {b.status === "confirmed" ? "Scheduled" :
+                                             b.status === "no-show"   ? "No-show" :
+                                             b.status.charAt(0).toUpperCase() + b.status.slice(1)}
                                         </span>
                                     </td>
                                     <td className="py-2">
                                         {b.status === "confirmed" && (
-                                            <button
-                                                className="btn btn-ghost text-xs text-red-600 hover:bg-red-50"
-                                                onClick={() => handleCancel(b)}
-                                                disabled={cancelling === b.id}
-                                            >
-                                                {cancelling === b.id ? "Cancelling…" : "Cancel"}
-                                            </button>
+                                            <div className="flex flex-col gap-1 items-start">
+                                                {b.date < adminTodayStr() && (<>
+                                                    <button
+                                                        className="btn btn-ghost text-xs text-blue-600 hover:bg-blue-50"
+                                                        onClick={() => handleMarkStatus(b, "completed")}
+                                                        disabled={updating === b.id}
+                                                    >
+                                                        {updating === b.id ? "Saving…" : "Complete"}
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-ghost text-xs text-amber-600 hover:bg-amber-50"
+                                                        onClick={() => handleMarkStatus(b, "no-show")}
+                                                        disabled={updating === b.id}
+                                                    >
+                                                        No-show
+                                                    </button>
+                                                </>)}
+                                                <button
+                                                    className="btn btn-ghost text-xs text-red-600 hover:bg-red-50"
+                                                    onClick={() => handleCancel(b)}
+                                                    disabled={cancelling === b.id}
+                                                >
+                                                    {cancelling === b.id ? "Cancelling…" : "Cancel"}
+                                                </button>
+                                            </div>
                                         )}
                                     </td>
                                 </tr>

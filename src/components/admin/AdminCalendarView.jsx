@@ -104,7 +104,7 @@ function DrawerContent({
     drawerTech, setDrawerTech, techs, drawerTechs,
     isDayClosed, daySlots, dayLocks,
     isBlockedForDrawer, handleBlockToggle,
-    localAvail, toggleSlot,
+    localAvail, toggleSlot, fillTech, clearTech,
     dayLoading, dayBooks, monthBlocked,
     saving, saved, saveDay,
     handleCancel, cancelling,
@@ -166,9 +166,17 @@ function DrawerContent({
 
                         return (
                             <div key={tech.id} className="border-t pt-3 space-y-2">
-                                <p className="text-xs font-semibold text-neutral-700 uppercase tracking-wide">
-                                    {tech.name}
-                                </p>
+                                <div className="flex items-center justify-between">
+                                    <p className="text-xs font-semibold text-neutral-700 uppercase tracking-wide">
+                                        {tech.name}
+                                    </p>
+                                    {!isTechBlocked && daySlots.length > 0 && (
+                                        <span className="flex gap-2 text-xs">
+                                            <button onClick={() => fillTech(tech.id)} className="text-neutral-400 hover:text-green-600 transition">All</button>
+                                            <button onClick={() => clearTech(tech.id)} className="text-neutral-400 hover:text-neutral-600 transition">None</button>
+                                        </span>
+                                    )}
+                                </div>
 
                                 {isTechBlocked ? (
                                     <p className="text-xs text-neutral-400 italic">Day blocked</p>
@@ -350,10 +358,16 @@ export default function AdminCalendarView() {
     useEffect(() => {
         if (!selDate || techs.length === 0) return;
         const la = {};
-        techs.forEach(t => { la[t.id] = [...(monthAvail[`${t.id}_${selDate}`] ?? [])]; });
+        const h = settings?.hours ? hoursForDay(settings.hours, selDate) : undefined;
+        const defaultSlots = h ? genSlots(h.startMin, h.endMin, slotSize) : [];
+        techs.forEach(t => {
+            const restriction = monthAvail[`${t.id}_${selDate}`];
+            // No restriction doc → open by default → pre-fill all business-hour slots
+            la[t.id] = restriction !== undefined ? [...restriction] : [...defaultSlots];
+        });
         setLocalAvail(la);
         setSaved(false);
-    }, [selDate, monthAvail, techs]);
+    }, [selDate, monthAvail, techs, settings, slotSize]);
 
     // ── Month navigation ──────────────────────────────────────────────────────
     function prevMonth() {
@@ -368,24 +382,25 @@ export default function AdminCalendarView() {
     // ── Day status dot ────────────────────────────────────────────────────────
     function getDayStatus(ds) {
         if (ds < todayStr()) return "past";
-        if (settings !== undefined && settings?.hours) {
-            const h = hoursForDay(settings.hours, ds);
-            if (h === null) return "closed";
-        }
+        const h = settings?.hours ? hoursForDay(settings.hours, ds) : undefined;
+        if (h === null) return "closed";
         if (monthBlocked.has(`all_${ds}`)) return "blocked";
+        if (!h || techs.length === 0) return "gray";
         const dl = monthLocks[ds] ?? new Set();
-        let hasAvail = false, hasOpen = false;
+        const businessSlots = genSlots(h.startMin, h.endMin, slotSize);
+        let hasTech = false, hasOpen = false;
         for (const t of techs) {
             if (monthBlocked.has(`${t.id}_${ds}`)) continue;
-            const slots = monthAvail[`${t.id}_${ds}`];
-            if (!slots || slots.length === 0) continue;
-            hasAvail = true;
-            for (const s of slots) {
-                if (!dl.has(`${t.id}_${s}`)) { hasOpen = true; break; }
+            hasTech = true;
+            // No restriction doc → open by default → use all business-hour slots
+            const restriction = monthAvail[`${t.id}_${ds}`];
+            const effectiveSlots = restriction !== undefined ? restriction : businessSlots;
+            if (effectiveSlots.some(s => !dl.has(`${t.id}_${s}`))) {
+                hasOpen = true;
+                break;
             }
-            if (hasOpen) break;
         }
-        if (!hasAvail) return "gray";
+        if (!hasTech) return "gray";
         return hasOpen ? "green" : "red";
     }
 
@@ -441,6 +456,20 @@ export default function AdminCalendarView() {
         } finally {
             setSaving(false);
         }
+    }
+
+    // ── Fill / clear a tech's slots for the selected day ─────────────────────
+    function fillTech(techId) {
+        setSaved(false);
+        setLocalAvail(prev => ({ ...prev, [techId]: [...daySlots] }));
+    }
+    function clearTech(techId) {
+        const locked = monthLocks[selDate] ?? new Set();
+        setSaved(false);
+        setLocalAvail(prev => ({
+            ...prev,
+            [techId]: (prev[techId] ?? []).filter(s => locked.has(`${techId}_${s}`)),
+        }));
     }
 
     // ── Block / unblock day ───────────────────────────────────────────────────
@@ -516,7 +545,7 @@ export default function AdminCalendarView() {
         drawerTech, setDrawerTech, techs, drawerTechs,
         isDayClosed, daySlots, dayLocks,
         isBlockedForDrawer, handleBlockToggle,
-        localAvail, toggleSlot,
+        localAvail, toggleSlot, fillTech, clearTech,
         dayLoading, dayBooks, monthBlocked,
         saving, saved, saveDay,
         handleCancel, cancelling,

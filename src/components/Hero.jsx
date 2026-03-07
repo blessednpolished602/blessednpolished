@@ -2,6 +2,9 @@
 import useSiteSettings from "../hooks/useSiteSettings";
 import { Link } from "react-router-dom";
 
+// Baked in at build time — set VITE_HERO_IMAGE_URL in .env.local / hosting env vars
+const STATIC_HERO_URL = import.meta.env.VITE_HERO_IMAGE_URL || null;
+
 export default function Hero({ onBook }) {
     const s = useSiteSettings();
 
@@ -39,14 +42,15 @@ export default function Hero({ onBook }) {
       aspect-[4/5] sm:aspect-[3/4] md:aspect-[4/3]
     "
                         >
-                            {s?.heroImage ? (
+                            {(STATIC_HERO_URL || s?.heroImage) ? (
                                 <img
-                                    src={s.heroImage}
-                                    alt={s.heroImageAlt || "Nail art at Blessed N Polished"}
+                                    src={STATIC_HERO_URL || s.heroImage}
+                                    alt={s?.heroImageAlt || "Nail art at Blessed N Polished"}
                                     className="absolute inset-0 h-full w-full object-cover object-center"
                                     width={1200}
                                     height={1600}
                                     loading="eager"
+                                    fetchPriority="high"
                                 />
                             ) : (
                                 <div className="absolute inset-0 bg-neutral-200" />

@@ -46,7 +46,7 @@ export default function TechnicianDetailPage() {
                         <p className="text-neutral-700">{tech.role}</p>
                         <p className="mt-4 max-w-2xl text-neutral-700">{tech.bio}</p>
                         <div className="mt-4 flex items-center gap-4">
-                            {tech.squareStaffId && <Link to={`/book/${tech.id}`} className="underline text-sm">Book with {tech.name.split(" ")[0]}</Link>}
+                            <Link to={`/book/${tech.id}`} className="underline text-sm">Book with {tech.name.split(" ")[0]}</Link>
                             <SocialLinks
                                 className="mt-3"
                                 size={18}
