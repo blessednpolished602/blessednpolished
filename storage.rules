@@ -1,0 +1,14 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Public read for all stored assets
+    match /{allPaths=**} {
+      allow read: if true;
+    }
+
+    // Admin-only write/delete for all paths
+    match /{allPaths=**} {
+      allow write, delete: if request.auth != null && request.auth.token.admin == true;
+    }
+  }
+}
