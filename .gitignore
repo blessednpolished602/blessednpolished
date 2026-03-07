@@ -31,3 +31,5 @@ index.html
 
 # Firebase service account credentials — never commit these
 serviceAccountKey.json
+serviceAccount.json
+*firebase-adminsdk*.json

@@ -11,6 +11,7 @@ const db = admin.firestore();
 
 const SLOT_SIZE_MIN = 30;
 const TIMEZONE = "America/Phoenix";
+const BUSINESS_NOTIFY_EMAIL = "blessednpolished@gmail.com";
 const DOW_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -96,24 +97,60 @@ async function sendConfirmationEmail({ apiKey, fromEmail, to, clientName, servic
   });
 }
 
+async function sendBusinessNotificationEmail({ apiKey, fromEmail, client, serviceName, techName, date, startMin, bookingId }) {
+  const name  = escHtml(client.name.trim());
+  const svc   = escHtml(serviceName);
+  const tech  = escHtml(techName);
+  const email = client.email ? escHtml(client.email) : "—";
+  const phone = client.phone ? escHtml(client.phone) : "—";
+  const notes = client.notes ? escHtml(client.notes) : "—";
+  const resend = new Resend(apiKey);
+  await resend.emails.send({
+    from: fromEmail,
+    to: BUSINESS_NOTIFY_EMAIL,
+    subject: `New Booking: ${client.name.trim()} – ${serviceName} on ${formatDate(date)}`,
+    html: `
+      <p><strong>New booking received.</strong></p>
+      <ul>
+        <li><strong>Client:</strong> ${name}</li>
+        <li><strong>Email:</strong> ${email}</li>
+        <li><strong>Phone:</strong> ${phone}</li>
+        <li><strong>Service:</strong> ${svc}</li>
+        <li><strong>Technician:</strong> ${tech}</li>
+        <li><strong>Date:</strong> ${formatDate(date)}</li>
+        <li><strong>Time:</strong> ${formatTime(startMin)} (${TIMEZONE})</li>
+        <li><strong>Notes:</strong> ${notes}</li>
+        <li><strong>Booking ID:</strong> ${bookingId}</li>
+      </ul>
+    `,
+  });
+}
+
 function tryEmail(secretKey, secretFrom, client, serviceName, result, date, startMin) {
-  if (!client.email) return;
   const apiKey = secretKey.value();
   const fromEmail = secretFrom.value();
   if (!apiKey || !fromEmail) {
-    console.warn("RESEND_API_KEY or RESEND_FROM_EMAIL not set — skipping confirmation email");
+    console.warn("RESEND_API_KEY or RESEND_FROM_EMAIL not set — skipping emails");
     return;
   }
-  sendConfirmationEmail({
-    apiKey, fromEmail,
-    to: client.email,
-    clientName: client.name.trim(),
-    serviceName,
+  if (client.email) {
+    sendConfirmationEmail({
+      apiKey, fromEmail,
+      to: client.email,
+      clientName: client.name.trim(),
+      serviceName,
+      techName: result.techName,
+      date,
+      startMin,
+      bookingId: result.bookingId,
+    }).catch((err) => console.error("Confirmation email failed:", err));
+  }
+  sendBusinessNotificationEmail({
+    apiKey, fromEmail, client, serviceName,
     techName: result.techName,
-    date,
-    startMin,
+    date, startMin,
     bookingId: result.bookingId,
-  }).catch((err) => console.error("Confirmation email failed:", err));
+  }).catch((err) => console.error("Business notification email failed:", err));
 }
 
 /**

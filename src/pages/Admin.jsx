@@ -24,6 +24,7 @@ import {
     setDoc,
     updateDoc,
     where,
+    limit,
 } from "firebase/firestore";
 
 import {
@@ -1598,6 +1599,18 @@ function BookingsTab() {
     const [dateTo,    setDateTo]    = useState(dateStrPlus(30));
     const [cancelling, setCancelling] = useState(null); // bookingId being cancelled
     const [updating,   setUpdating]   = useState(null); // bookingId being marked complete/no-show
+    const [hasPastConfirmed, setHasPastConfirmed] = useState(false);
+
+    // Check once on mount if any past confirmed bookings exist
+    useEffect(() => {
+        const yesterday = dateStrPlus(-1);
+        getDocs(query(
+            collection(db, "bookings"),
+            where("date", "<=", yesterday),
+            where("status", "==", "confirmed"),
+            limit(1)
+        )).then(snap => setHasPastConfirmed(!snap.empty)).catch(() => {});
+    }, []);
 
     // Load technician list for filter dropdown
     useEffect(() => {
@@ -1730,13 +1743,15 @@ function BookingsTab() {
                         className="border rounded-lg px-3 py-2"
                     />
                 </div>
-                <button
-                    type="button"
-                    className="self-end px-3 py-2 text-xs border rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 whitespace-nowrap"
-                    onClick={() => { setDateFrom(dateStrPlus(-90)); setDateTo(dateStrPlus(-1)); setFilterStatus("confirmed"); }}
-                >
-                    Past – needs attention
-                </button>
+                {hasPastConfirmed && (
+                    <button
+                        type="button"
+                        className="self-end px-3 py-2 text-xs border rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 whitespace-nowrap"
+                        onClick={() => { setDateFrom(dateStrPlus(-90)); setDateTo(dateStrPlus(-1)); setFilterStatus("confirmed"); }}
+                    >
+                        Past – needs attention
+                    </button>
+                )}
             </div>
 
             {loading && <p className="text-sm text-neutral-400">Loading…</p>}
